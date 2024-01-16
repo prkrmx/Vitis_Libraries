@@ -19,6 +19,8 @@
 
 using namespace std;
 
+#define OUT_8UC1 0
+
 /*********************************************************************************
  * Function:    Mat2MultiBayerAXIvideo
  * Parameters:
@@ -74,6 +76,50 @@ static void Mat2MultiBayerAXIvideo(cv::Mat& img, InVideoStrm_t& AXI_video_strm, 
             }
             axi.keep = -1;
             AXI_video_strm << axi;
+        }
+    }
+}
+
+/*********************************************************************************
+ * Function:    MultiPixelAXIvideo2Mat_gray
+ * Parameters:  96bit stream with 4 pixels packed
+ * Return:      None
+ * Description: extract pixels from stream and write to open CV Image
+ **********************************************************************************/
+static void MultiPixelAXIvideo2Mat_gray(OutVideoStrm_t& AXI_video_strm, cv::Mat& img, unsigned char ColorFormat) {
+    int i, j, k, l;
+    ap_axiu<AXI_WIDTH_OUT, 1, 1, 1> axi;
+
+#if OUT_8UC1
+    unsigned char cv_pix;
+    int depth = XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC);
+#else
+    unsigned short cv_pix;
+    int depth = XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC);
+#endif
+    bool sof = 0;
+
+    for (i = 0; i < img.rows; i++) {
+        for (j = 0; j < img.cols / XF_NPPC; j++) { // 4 pixels read per iteration
+            AXI_video_strm >> axi;
+            if ((i == 0) && (j == 0)) {
+                if (axi.user.to_int() == 1) {
+                    sof = 1;
+                } else {
+                    j--;
+                }
+            }
+            if (sof) {
+                for (l = 0; l < XF_NPPC; l++) {
+                    cv_pix = axi.data(l * depth + depth - 1, l * depth);
+
+#if OUT_8UC1
+                    img.at<unsigned char>(i, (XF_NPPC * j + l)) = cv_pix;
+#else
+                    img.at<unsigned short>(i, (XF_NPPC * j + l)) = cv_pix;
+#endif
+                }
+            } // if(sof)
         }
     }
 }
@@ -168,47 +214,8 @@ static void MultiPixelAXIvideo2Mat(OutVideoStrm_t& AXI_video_strm, cv::Mat& img,
         }
     }
 }
-/*********************************************************************************
- * Function:    MultiPixelAXIvideo2Mat
- * Parameters:  96bit stream with 4 pixels packed
- * Return:      None
- * Description: extract pixels from stream and write to open CV Image
- **********************************************************************************/
-static void MultiPixelAXIvideo2Mat_yuv(OutVideoStrm_t& AXI_video_strm, cv::Mat& img, unsigned char ColorFormat) {
-    int i, j, k, l;
-    ap_axiu<AXI_WIDTH_OUT, 1, 1, 1> axi;
-    /*
-    #if 1
-        cv::Vec3b cv_pix;
-    #else
-        cv::Vec3w cv_pix;
-    #endif
-    */
-    unsigned short cv_pix;
-    int depth = XF_DTPIXELDEPTH(XF_16UC1, XF_NPPC);
-    bool sof = 0;
 
-    for (i = 0; i < img.rows; i++) {
-        for (j = 0; j < img.cols / XF_NPPC; j++) { // 4 pixels read per iteration
-            AXI_video_strm >> axi;
-            if ((i == 0) && (j == 0)) {
-                if (axi.user.to_int() == 1) {
-                    sof = 1;
-                } else {
-                    j--;
-                }
-            }
-            if (sof) {
-                for (l = 0; l < XF_NPPC; l++) {
-                    cv_pix = axi.data(l * depth + depth - 1, l * depth);
-
-                    img.at<unsigned short>(i, (XF_NPPC * j + l)) = cv_pix;
-                }
-            } // if(sof)
-        }
-    }
-}
-void compute_gamma(float r_g, float g_g, float b_g, uchar gamma_lut[256 * 3]) {
+void compute_gamma_lum(float l_g, uchar gamma_lut[256]) {
     float gamma_inv[256] = {
         0.000000, 0.003922, 0.007843, 0.011765, 0.015686, 0.019608, 0.023529, 0.027451, 0.031373, 0.035294, 0.039216,
         0.043137, 0.047059, 0.050980, 0.054902, 0.058824, 0.062745, 0.066667, 0.070588, 0.074510, 0.078431, 0.082353,
@@ -235,12 +242,11 @@ void compute_gamma(float r_g, float g_g, float b_g, uchar gamma_lut[256 * 3]) {
         0.949020, 0.952941, 0.956863, 0.960784, 0.964706, 0.968627, 0.972549, 0.976471, 0.980392, 0.984314, 0.988235,
         0.992157, 0.996078, 1.000000};
 
-    unsigned char gam_r = 0, gam_g = 0, gam_b = 0;
+    unsigned char gam_r = 0; // gam_g = 0, gam_b = 0;
 
     for (int i = 0; i < 256; ++i) {
-        float r_inv = (float)1 / r_g;
-        float g_inv = (float)1 / g_g;
-        float b_inv = (float)1 / b_g;
+        float r_inv = (float)1 / l_g;
+
         float powval_r = (float)std::pow(gamma_inv[i], r_inv);
         short tempgamma_r = (powval_r * 255.0);
 
@@ -249,30 +255,18 @@ void compute_gamma(float r_g, float g_g, float b_g, uchar gamma_lut[256 * 3]) {
         } else {
             gam_r = tempgamma_r;
         }
-
-        float powval_g = (float)std::pow(gamma_inv[i], g_inv);
-        short tempgamma_g = (powval_g * 255.0);
-
-        if (tempgamma_g > 255) {
-            gam_g = 255;
-        } else {
-            gam_g = tempgamma_g;
-        }
-
-        float powval_b = (float)std::pow(gamma_inv[i], b_inv);
-        short tempgamma_b = (powval_b * 255.0);
-
-        if (tempgamma_b > 255) {
-            gam_b = 255;
-        } else {
-            gam_b = tempgamma_b;
-        }
         gamma_lut[i] = gam_r;
-        gamma_lut[i + 256] = gam_g;
-        gamma_lut[i + 512] = gam_b;
     }
 }
+
 int main(int argc, char** argv) {
+
+    if (argc != 2) {
+        fprintf(stderr, "Invalid Number of Arguments!\nUsage:\n");
+        fprintf(stderr, "<Executable Name> <input image path> \n");
+        return -1;
+    }
+
     cv::Mat raw_input, final_output;
 
     InVideoStrm_t src_axi;
@@ -285,42 +279,52 @@ int main(int argc, char** argv) {
     // read input image
     raw_input = cv::imread(argv[1], -1);
 
+    if (raw_input.data == NULL) {
+        fprintf(stderr, "Cannot open image at %s\n", argv[1]);
+        return 0;
+    }
+
     imgSize.height = raw_input.rows;
     imgSize.width = raw_input.cols;
 
-#if T_8U || T_10U || T_12U
+    std::cout << "Input image height : " << imgSize.height << std::endl;
+    std::cout << "Input image width  : " << imgSize.width << std::endl;
+    std::cout << "Input Image Bit Depth:" << XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC) << std::endl;
+    std::cout << "Input Image Channels:" << XF_CHANNELS(XF_SRC_T, XF_NPPC) << std::endl;
+    std::cout << "NPPC:" << XF_NPPC << std::endl;
+
+// #if T_8U || T_10U || T_12U
+#if OUT_8UC1
     // Allocate memory for final image
-    final_output.create(raw_input.rows, raw_input.cols, CV_8UC3);
+    final_output.create(raw_input.rows, raw_input.cols, CV_8UC1);
 #else
-    final_output.create(raw_input.rows, raw_input.cols, CV_8UC3);
+    final_output.create(raw_input.rows, raw_input.cols, CV_16UC1);
 #endif
 
     imwrite("input.png", raw_input);
 
-    unsigned short rgain = 256;
-    unsigned short bgain = 256;
+    unsigned short gain_lum = 128;
 
-    unsigned char mode_reg = 1;
+    unsigned char gamma_lut[256];
 
-    unsigned short pawb = 128;
+    float gamma_val_lum = 1.2f;
 
-    unsigned char gamma_lut[256 * 3];
-    uint32_t hist0_awb[3][HIST_SIZE] = {0};
-    uint32_t hist1_awb[3][HIST_SIZE] = {0};
+    compute_gamma_lum(gamma_val_lum, gamma_lut);
 
-    float gamma_val_r = 0.5f, gamma_val_g = 0.8f, gamma_val_b = 0.8f;
-
-    compute_gamma(gamma_val_r, gamma_val_g, gamma_val_b, gamma_lut);
+    int clip = 3;
+    int tilesY = TILES_Y_MAX;
+    int tilesX = TILES_X_MAX;
+    unsigned char mode = 0;
 
     for (int i = 0; i < 2; i++) {
         Mat2MultiBayerAXIvideo(raw_input, src_axi, InColorFormat);
 
         // Call IP Processing function
-        ISPPipeline_accel(raw_input.cols, raw_input.rows, src_axi, dst_axi, rgain, bgain, gamma_lut, mode_reg, pawb);
+        ISPPipeline_accel(src_axi, dst_axi, raw_input.cols, raw_input.rows, gain_lum, clip, tilesY, tilesX, mode, gamma_lut);
 
         // Convert processed image back to CV image, then to XVID image
-        MultiPixelAXIvideo2Mat(dst_axi, final_output, 0);
-        //        MultiPixelAXIvideo2Mat_yuv(dst_axi, final_output, OutColorFormat);
+        MultiPixelAXIvideo2Mat_gray(dst_axi, final_output, 0);
+
     }
 
     imwrite("output.png", final_output);

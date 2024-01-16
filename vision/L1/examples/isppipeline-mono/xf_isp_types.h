@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef _XF_ISP_TYPES_H_
 #define _XF_ISP_TYPES_H_
 
@@ -41,8 +42,16 @@
 #include "imgproc/xf_cvt_color.hpp"
 #include "imgproc/xf_cvt_color_1.hpp"
 #include "imgproc/xf_gammacorrection.hpp"
+#include "imgproc/xf_median_blur.hpp"
+#include "imgproc/xf_clahe.hpp"
 
 #define S_DEPTH 4096
+
+static constexpr int CLIPLIMIT = 32;
+static constexpr int TILES_Y_MIN = 2;
+static constexpr int TILES_X_MIN = 2;
+static constexpr int TILES_Y_MAX = 4;
+static constexpr int TILES_X_MAX = 4;
 
 // --------------------------------------------------------------------
 // Macros definitions
@@ -54,8 +63,8 @@
 
 #define IN_DATA_WIDTH _DATA_WIDTH_(XF_SRC_T, XF_NPPC)
 //#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_DST_T, XF_NPPC)
-#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_LTM_T, XF_NPPC)
-//#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_16UC1, XF_NPPC)
+//#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_LTM_T, XF_NPPC)
+#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_SRC_T, XF_NPPC)
 
 #define AXI_WIDTH_IN _BYTE_ALIGN_(IN_DATA_WIDTH)
 #define AXI_WIDTH_OUT _BYTE_ALIGN_(OUT_DATA_WIDTH)
@@ -102,13 +111,14 @@ typedef struct {
 // Prototype
 // --------------------------------------------------------------------
 // top level function for HW synthesis
-void ISPPipeline_accel(uint16_t width,
-                       uint16_t height,
-                       InVideoStrm_t& s_axis_video,
+void ISPPipeline_accel(InVideoStrm_t& s_axis_video,
                        OutVideoStrm_t& m_axis_video,
-                       uint16_t rgain,
-                       uint16_t bgain,
-                       unsigned char r_lut[256 * 3],
-                       unsigned char mode_reg,
-                       uint16_t pawb);
+                       uint16_t width,
+                       uint16_t height,
+                       uint16_t lgain,
+                       uint16_t clip,
+                       uint16_t tilesY,
+                       uint16_t tilesX,
+                       unsigned char mode_sw,
+                       unsigned char gamma_lut[256]) ;
 #endif //_XF_ISP_TYPES_H_

@@ -23,7 +23,6 @@
 #include "hls_stream.h"
 #include "ap_int.h"
 #include "common/xf_common.hpp"
-//#include "common/xf_utility.h"
 #include "ap_axi_sdata.h"
 #include "common/xf_axi_io.hpp"
 #include "xf_config_params.h"
@@ -45,8 +44,6 @@
 #include "imgproc/xf_median_blur.hpp"
 #include "imgproc/xf_clahe.hpp"
 
-#define S_DEPTH 4096
-
 static constexpr int CLIPLIMIT = 32;
 static constexpr int TILES_Y_MIN = 2;
 static constexpr int TILES_X_MIN = 2;
@@ -62,16 +59,14 @@ static constexpr int TILES_X_MAX = 4;
 #define _BYTE_ALIGN_(_N) ((((_N) + 7) / 8) * 8)
 
 #define IN_DATA_WIDTH _DATA_WIDTH_(XF_SRC_T, XF_NPPC)
-//#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_DST_T, XF_NPPC)
-//#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_LTM_T, XF_NPPC)
-#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_SRC_T, XF_NPPC)
+#define OUT_DATA_WIDTH _DATA_WIDTH_(XF_DST_T, XF_NPPC)
 
 #define AXI_WIDTH_IN _BYTE_ALIGN_(IN_DATA_WIDTH)
 #define AXI_WIDTH_OUT _BYTE_ALIGN_(OUT_DATA_WIDTH)
 
-#define NR_COMPONENTS 3
-static constexpr int BLOCK_HEIGHT = 64;
-static constexpr int BLOCK_WIDTH = 64;
+#define BLACK_LEVEL 32
+#define MAX_PIX_VAL (1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC))) - 1
+
 // --------------------------------------------------------------------
 // Internal types
 // --------------------------------------------------------------------
@@ -82,30 +77,6 @@ typedef ap_axiu<AXI_WIDTH_OUT, 1, 1, 1> OutVideoStrmBus_t;
 // Input/Output AXI video stream
 typedef hls::stream<InVideoStrmBus_t> InVideoStrm_t;
 typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
-
-#if T_8U
-#define HIST_SIZE 256
-#endif
-#if T_10U
-#define HIST_SIZE 1024
-#endif
-#if T_12U
-#define HIST_SIZE 4096
-#endif
-#if T_16U
-#define HIST_SIZE 4096
-#endif
-
-#define BLACK_LEVEL 32
-#define MAX_PIX_VAL (1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC))) - 1
-
-// HW Registers
-typedef struct {
-    uint16_t width;
-    uint16_t height;
-    //    uint16_t video_format;
-    uint16_t bayer_phase;
-} HW_STRUCT_REG;
 
 // --------------------------------------------------------------------
 // Prototype
@@ -119,6 +90,6 @@ void ISPPipeline_accel(InVideoStrm_t& s_axis_video,
                        uint16_t clip,
                        uint16_t tilesY,
                        uint16_t tilesX,
-                       unsigned char mode_sw,
-                       unsigned char gamma_lut[256]) ;
+                       unsigned char mode_reg,
+                       unsigned char gamma_lut[256]);
 #endif //_XF_ISP_TYPES_H_

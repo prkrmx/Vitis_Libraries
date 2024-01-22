@@ -19,7 +19,7 @@
 
 using namespace std;
 
-#define OUT_8UC1 0
+#define OUT_8UC1 1
 
 /*********************************************************************************
  * Function:    Mat2MultiBayerAXIvideo
@@ -287,19 +287,24 @@ int main(int argc, char** argv) {
     imgSize.height = raw_input.rows;
     imgSize.width = raw_input.cols;
 
+
     std::cout << "Input image height : " << imgSize.height << std::endl;
     std::cout << "Input image width  : " << imgSize.width << std::endl;
     std::cout << "Input Image Bit Depth:" << XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC) << std::endl;
     std::cout << "Input Image Channels:" << XF_CHANNELS(XF_SRC_T, XF_NPPC) << std::endl;
     std::cout << "NPPC:" << XF_NPPC << std::endl;
+    std::cout << "IN DEPTH:" << raw_input.depth() << std::endl;
 
 // #if T_8U || T_10U || T_12U
 #if OUT_8UC1
     // Allocate memory for final image
     final_output.create(raw_input.rows, raw_input.cols, CV_8UC1);
+    unsigned char mode = 1;
 #else
     final_output.create(raw_input.rows, raw_input.cols, CV_16UC1);
+    unsigned char mode = 0;
 #endif
+    
 
     imwrite("input.png", raw_input);
 
@@ -314,7 +319,7 @@ int main(int argc, char** argv) {
     int clip = 3;
     int tilesY = TILES_Y_MAX;
     int tilesX = TILES_X_MAX;
-    unsigned char mode = 0;
+    
 
     for (int i = 0; i < 2; i++) {
         Mat2MultiBayerAXIvideo(raw_input, src_axi, InColorFormat);
@@ -326,7 +331,7 @@ int main(int argc, char** argv) {
         MultiPixelAXIvideo2Mat_gray(dst_axi, final_output, 0);
 
     }
-
+    std::cout << "OUT DEPTH:" << final_output.depth() << std::endl;
     imwrite("output.png", final_output);
 
     return 0;

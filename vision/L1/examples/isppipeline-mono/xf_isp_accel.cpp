@@ -23,7 +23,7 @@ static bool flag = 0;
 
 #define CLAHE_T                                                                                           \
     xf::cv::clahe::CLAHEImpl<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, CLIPLIMIT, TILES_Y_MAX, TILES_X_MAX, \
-                             XF_CV_DEPTH_IN_1, XF_CV_DEPTH_OUT_1, TILES_Y_MIN, TILES_X_MIN>
+                             XF_CV_DEPTH_QAD, XF_CV_DEPTH_CLH, TILES_Y_MIN, TILES_X_MIN>
 
 static constexpr int HIST_COUNTER_BITS = CLAHE_T::HIST_COUNTER_BITS;
 static constexpr int CLIP_COUNTER_BITS = CLAHE_T::CLIP_COUNTER_BITS;
@@ -139,7 +139,7 @@ Row_Loop:
 }
 
 template <int TYPE, int ROWS, int COLS, int NPPC, int XFCVDEPTH_OUT>
-void GRAYMat2AXIvideo(xf::cv::Mat<TYPE, ROWS, COLS, NPPC, XFCVDEPTH_OUT>& gray_mat, OutVideoStrm_t& gray_strm) {
+void GrayMat2AXIvideo(xf::cv::Mat<TYPE, ROWS, COLS, NPPC, XFCVDEPTH_OUT>& gray_mat, OutVideoStrm_t& gray_strm) {
     // clang-format off
 #pragma HLS INLINE OFF
     // clang-format on
@@ -218,97 +218,46 @@ void ISPpipeline(InVideoStrm_t& s_axis_video,
                  uint16_t clip,
                  uint16_t tilesY,
                  uint16_t tilesX,
-                 unsigned char mode_sw) {
+                 unsigned char mode_reg) {
     // clang-format off
-
 #pragma HLS INLINE OFF
-    // clang-format on
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1> img_in(height, width); // Input image
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_2> img_blc(height, width);
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DPC_OUT> img_mbf(height, width);
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GAIN_OUT> img_gcm(height, width);
-    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_AEC_IN> img_qad(height, width);
-    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DST> img_clh(height, width);
+	// clang-format on
+    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP> img_inp(height, width);
+    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC> img_blc(height, width);
+    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF> img_mbf(height, width);
+    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GCM> img_gcm(height, width);
+    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_QAD> img_qad(height, width);
+    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH> img_clh(height, width);
     xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT> img_out(height, width);
 
     // clang-format off
 #pragma HLS DATAFLOW
-    // clang-format on
+	// clang-format on
 
-    CLAHE_T obj;
-    const int Q_VAL = 1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC));
-    float inputMax = (1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC))) - 1; // 65535.0f;
-    float mul_fact = (inputMax / (inputMax - BLACK_LEVEL));
-    ap_uint<8> mode = (ap_uint<8>)mode_sw;
-    ap_uint<1> do_blc = mode.range(0, 0); // Black Level Correction
-    ap_uint<1> do_mbf = mode.range(1, 1); // Median Blur Filter
-    ap_uint<1> do_gcm = mode.range(2, 2); // Gain Control Mono
-    ap_uint<1> do_qad = mode.range(3, 3); // Quatization and Dithering
-    ap_uint<1> do_clh = mode.range(4, 4); // CLAHE
-    ap_uint<1> do_gmc = mode.range(5, 5); // Gamma Correction
+	CLAHE_T obj;
+	const int Q_VAL = 1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC));
+	float inputMax = (1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC))) - 1; // 65535.0f;
+	float mul_fact = (inputMax / (inputMax - BLACK_LEVEL));
+	ap_uint<8> mode = (ap_uint<8> ) mode_reg;
+	ap_uint<1> do_job = mode.range(0, 0); // Do JOB, otherwise pass to output
 
-
-#ifndef TEST
-    AXIVideo2BayerMat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1>(s_axis_video, img_in);
-    if (do_blc) {
-        xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1, XF_CV_DEPTH_IN_2, 16, 15, 1>(img_in, img_blc, BLACK_LEVEL, mul_fact);
-        xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_2,XF_CV_DEPTH_DPC_OUT>(img_blc, img_mbf);
-        xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DPC_OUT, XF_CV_DEPTH_GAIN_OUT>(img_mbf, img_gcm, lgain);
-        xf::cv::xf_QuatizationDithering<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC, XF_CV_DEPTH_GAIN_OUT, XF_CV_DEPTH_AEC_IN>(img_gcm, img_qad);
-        obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
-        xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DST, XF_CV_DEPTH_OUT>(img_clh, img_out, gamma_lut);
-        GRAYMat2AXIvideo<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_out, m_axis_video);
+	AXIVideo2BayerMat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(s_axis_video, img_inp);
+	if (do_job) {
+		xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP, XF_CV_DEPTH_BLC, 16, 15, 1>(
+			img_inp, img_blc, BLACK_LEVEL, mul_fact);
+		xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC, XF_CV_DEPTH_MBF>(
+			img_blc, img_mbf);
+		xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF, XF_CV_DEPTH_GCM>(
+			img_mbf, img_gcm, lgain);
+		xf::cv::xf_QuatizationDithering<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC, XF_CV_DEPTH_GCM, XF_CV_DEPTH_QAD>(
+			img_gcm, img_qad);
+		obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
+		xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH, XF_CV_DEPTH_OUT>(
+			img_clh, img_out, gamma_lut);
+		GrayMat2AXIvideo<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_out, m_axis_video);
     } else {
-        GRAYMat2AXIvideo<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1>(img_in, m_axis_video);
-    }
-    
-#else
-    AXIVideo2BayerMat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1>(s_axis_video, img_in);
-    // GRAYMat2AXIvideo<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1>(img_in, m_axis_video);
-    if (do_blc) {
-        xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1, XF_CV_DEPTH_IN_2, 16, 15,
-                                     1>(img_in, img_blc, BLACK_LEVEL, mul_fact);
-    } else {
-        fifo_copy<XF_SRC_T, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_1, XF_CV_DEPTH_IN_2>(img_in, img_blc,
-                                                                                                        height, width);
-    }
-    if (do_mbf) {
-        xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_2,
-                           XF_CV_DEPTH_DPC_OUT>(img_blc, img_mbf);
-    } else {
-        fifo_copy<XF_SRC_T, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_IN_2, XF_CV_DEPTH_DPC_OUT>(
-            img_blc, img_mbf, height, width);
-    }
-    if (do_gcm) {
-        xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DPC_OUT, XF_CV_DEPTH_GAIN_OUT>(
-            img_mbf, img_gcm, lgain);
-    } else {
-        fifo_copy<XF_SRC_T, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DPC_OUT, XF_CV_DEPTH_GAIN_OUT>(
-            img_mbf, img_gcm, height, width);
-    }
-
-    if (do_qad) {
-        xf::cv::xf_QuatizationDithering<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC,
-                                        XF_CV_DEPTH_GAIN_OUT, XF_CV_DEPTH_AEC_IN>(img_gcm, img_qad);
-        obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
-        xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DST, XF_CV_DEPTH_OUT>(
-            img_clh, img_out, gamma_lut);
-        GRAYMat2AXIvideo<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_out, m_axis_video);
-    } else {
-        // fifo_copy<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GAIN_OUT,
-        // XF_CV_DEPTH_AEC_IN>(img_gcm, img_qad, height, width);
-        GRAYMat2AXIvideo<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GAIN_OUT>(img_gcm, m_axis_video);
-    }
-#endif
-
-    // if (XF_DST_T == XF_8UC1) {
-    //     fifo_copy<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GAIN_OUT, XF_CV_DEPTH_AEC_IN>(img_gcm, img_qad, height, width);
-    // } else {
-    //     xf::cv::xf_QuatizationDithering<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC,XF_CV_DEPTH_GAIN_OUT, XF_CV_DEPTH_AEC_IN>(img_gcm, img_qad);
-    // }
-    // obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
-    // xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DST, XF_CV_DEPTH_OUT>(img_clh, img_out, gamma_lut);
-    // GRAYMat2AXIvideo<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_DST>(img_out, m_axis_video);
+		GrayMat2AXIvideo<XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_inp, m_axis_video);
+	}
 }
 
 /*********************************************************************************
@@ -317,7 +266,6 @@ void ISPpipeline(InVideoStrm_t& s_axis_video,
  * Return:
  * Description:
  **********************************************************************************/
-// void ISPPipeline_accel(HW_STRUCT_REG HwReg, InVideoStrm_t& s_axis_video, OutVideoStrm_t& m_axis_video) {
 void ISPPipeline_accel(InVideoStrm_t& s_axis_video,
                        OutVideoStrm_t& m_axis_video,
                        uint16_t width,
@@ -326,21 +274,28 @@ void ISPPipeline_accel(InVideoStrm_t& s_axis_video,
                        uint16_t clip,
                        uint16_t tilesY,
                        uint16_t tilesX,
-                       unsigned char mode_sw,
+                       unsigned char mode_reg,
                        unsigned char gamma_lut[256]) {
-// Create AXI Streaming Interfaces for the core
-// clang-format off
+    // Create AXI Streaming Interfaces for the core
+    // clang-format off
 #pragma HLS INTERFACE axis port=&s_axis_video register
 #pragma HLS INTERFACE axis port=&m_axis_video register
 
-#pragma HLS INTERFACE s_axilite port=width      bundle=CTRL offset=0x0010
-#pragma HLS INTERFACE s_axilite port=height     bundle=CTRL offset=0x0018
-#pragma HLS INTERFACE s_axilite port=lgain      bundle=CTRL offset=0x0030
-#pragma HLS INTERFACE s_axilite port=clip       bundle=CTRL offset=0x0038
-#pragma HLS INTERFACE s_axilite port=tilesY     bundle=CTRL offset=0x0046
-#pragma HLS INTERFACE s_axilite port=tilesX     bundle=CTRL offset=0x0054
-#pragma HLS INTERFACE s_axilite port=mode_sw    bundle=CTRL offset=0x005C
-#pragma HLS INTERFACE s_axilite port=gamma_lut  bundle=CTRL offset=0x0800
+#pragma HLS INTERFACE s_axilite port=width      bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=height     bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=lgain      bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=clip       bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=tilesY     bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=tilesX     bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=mode_reg   bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=gamma_lut  bundle=CTRL
+
+// #pragma HLS INTERFACE s_axilite port=lgain      bundle=CTRL offset=0x0020
+// #pragma HLS INTERFACE s_axilite port=clip       bundle=CTRL offset=0x0024
+// #pragma HLS INTERFACE s_axilite port=tilesY     bundle=CTRL offset=0x0028
+// #pragma HLS INTERFACE s_axilite port=tilesX     bundle=CTRL offset=0x002C
+// #pragma HLS INTERFACE s_axilite port=mode_reg   bundle=CTRL offset=0x0030
+// #pragma HLS INTERFACE s_axilite port=gamma_lut  bundle=CTRL offset=0x0100
 
 #pragma HLS INTERFACE s_axilite port=return bundle=CTRL
 // clang-format on
@@ -348,16 +303,15 @@ void ISPPipeline_accel(InVideoStrm_t& s_axis_video,
 #pragma HLS ARRAY_PARTITION variable=_lut1 dim=3 complete
 #pragma HLS ARRAY_PARTITION variable=_lut2 dim=3 complete
 
-    // clang-format on
+	// clang-format on
     if (!flag) {
         ISPpipeline(s_axis_video, m_axis_video, height, width, lgain, gamma_lut, _lut1, _lut2, _clipCounter, clip,
-                    tilesX, tilesY, mode_sw);
+                    tilesX, tilesY, mode_reg);
         flag = 1;
 
-    } 
-    else {
+    } else {
         ISPpipeline(s_axis_video, m_axis_video, height, width, lgain, gamma_lut, _lut2, _lut1, _clipCounter, clip,
-                    tilesX, tilesY, mode_sw);
+                    tilesX, tilesY, mode_reg);
         flag = 0;
     }
 }

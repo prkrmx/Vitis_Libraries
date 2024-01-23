@@ -71,46 +71,40 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    cv::Mat raw_input, final_output;
+    cv::Mat raw_src, raw_dst;
     int clip = 3;
     int tilesY = TILES_Y_MAX;
     int tilesX = TILES_X_MAX;
     unsigned short gain_lum = 128;
-    unsigned char gamma_lut[256];
     float gamma_val_lum = 1.2f;
+    unsigned char gamma_lut[256];
     compute_gamma_lum(gamma_val_lum, gamma_lut);
 
     // read input image
-    raw_input = cv::imread(argv[1], -1);
+    raw_src = cv::imread(argv[1], -1);
 
-    if (raw_input.data == NULL) {
+    if (raw_src.data == NULL) {
         fprintf(stderr, "Cannot open image at %s\n", argv[1]);
         return 0;
     }
-    imwrite("input.png", raw_input);
+    imwrite("input.png", raw_src);
+    raw_dst.create(raw_src.rows, raw_src.cols, CV_8UC1);
 
-    std::cout << "Input image height : " << raw_input.rows << std::endl;
-    std::cout << "Input image width  : " << raw_input.cols << std::endl;
-    std::cout << "Input Image Bit Depth:" << XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC) << std::endl;
-    std::cout << "Input Image Channels:" << XF_CHANNELS(XF_SRC_T, XF_NPPC) << std::endl;
-    std::cout << "NPPC:" << XF_NPPC << std::endl;
-    std::cout << "IN DEPTH:" << raw_input.depth() << std::endl;
-
-// #if T_8U || T_10U || T_12U
-#if OUT_8UC1
-    // Allocate memory for final image
-    final_output.create(raw_input.rows, raw_input.cols, CV_8UC1);
-#else
-    final_output.create(raw_input.rows, raw_input.cols, CV_16UC1);
-#endif
-    std::cout << "OUT DEPTH:" << final_output.depth() << std::endl;
+    std::cout << "Input image height: " << raw_src.rows << std::endl;
+    std::cout << "Input image width: " << raw_src.cols << std::endl;
+    std::cout << "Input Image Bit Depth: " << XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC) << std::endl;
+    std::cout << "Input Image Channels: " << XF_CHANNELS(XF_SRC_T, XF_NPPC) << std::endl;
+    std::cout << "Input Image Depth: " << raw_src.depth() << std::endl;
+    std::cout << "Output Image Bit Depth: " << XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC) << std::endl;
+    std::cout << "Output Image Channels: " << XF_CHANNELS(XF_LTM_T, XF_NPPC) << std::endl;
+    std::cout << "Output Image Depth: " << raw_dst.depth() << std::endl;
+    std::cout << "NPPC: " << XF_NPPC << std::endl;
 
     for (int i = 0; i < 2; i++) {
         // Call IP Processing function
-        ISPPipeline_accel((ap_uint<INPUT_PTR_WIDTH>*)raw_input.data, (ap_uint<INPUT_PTR_WIDTH>*)final_output.data,
-                          raw_input.cols, raw_input.rows, gain_lum, clip, tilesY, tilesX, gamma_lut);
+        ISPPipeline_accel((ap_uint<INPUT_PTR_WIDTH>*)raw_src.data, (ap_uint<INPUT_PTR_WIDTH>*)raw_dst.data, raw_src.cols, raw_src.rows, gain_lum, clip, tilesY, tilesX, gamma_lut);
     }
-    imwrite("output.png", final_output);
+    imwrite("output.png", raw_dst);
 
     return 0;
 }

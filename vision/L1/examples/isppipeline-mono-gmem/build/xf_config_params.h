@@ -47,10 +47,10 @@
 #define INPUT_PTR_WIDTH 32
 #define OUTPUT_PTR_WIDTH 32
 
-#define XF_CV_DEPTH_INP 2
-#define XF_CV_DEPTH_BLC 2
-#define XF_CV_DEPTH_MBF 2
-#define XF_CV_DEPTH_GCM 2
-#define XF_CV_DEPTH_QAD 2
-#define XF_CV_DEPTH_CLH 2
-#define XF_CV_DEPTH_OUT 2
+#define XF_CV_DEPTH_INP 3
+#define XF_CV_DEPTH_BLC 3
+#define XF_CV_DEPTH_MBF 3
+#define XF_CV_DEPTH_GCM 3
+#define XF_CV_DEPTH_QAD 3
+#define XF_CV_DEPTH_CLH 3
+#define XF_CV_DEPTH_OUT 3

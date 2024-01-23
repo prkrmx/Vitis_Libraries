@@ -56,13 +56,13 @@ void ISPpipeline(ap_uint<INPUT_PTR_WIDTH>* pntr_in,
 // clang-format off
 #pragma HLS INLINE OFF
 // clang-format on
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP> img_inp(height, width);
+    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP> img_src(height, width);
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC> img_blc(height, width);
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF> img_mbf(height, width);
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GCM> img_gcm(height, width);
     xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_QAD> img_qad(height, width);
     xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH> img_clh(height, width);
-    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT> img_out(height, width);
+    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT> img_dst(height, width);
 
 // clang-format off
 #pragma HLS DATAFLOW
@@ -73,14 +73,14 @@ void ISPpipeline(ap_uint<INPUT_PTR_WIDTH>* pntr_in,
 	float inputMax = (1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC))) - 1; // 65535.0f;
 	float mul_fact = (inputMax / (inputMax - BLACK_LEVEL));
 
-    xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(pntr_in, img_inp);
-    xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP, XF_CV_DEPTH_BLC, 16, 15, 1>(img_inp, img_blc, BLACK_LEVEL, mul_fact);
+    xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(pntr_in, img_src);
+    xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP, XF_CV_DEPTH_BLC, 16, 15, 1>(img_src, img_blc, BLACK_LEVEL, mul_fact);
     xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC, XF_CV_DEPTH_MBF>(img_blc, img_mbf);
     xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF, XF_CV_DEPTH_GCM>(img_mbf, img_gcm, lgain);
-    xf::cv::xf_QuatizationDithering<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC, XF_CV_DEPTH_GCM, XF_CV_DEPTH_QAD>(img_gcm, img_qad);
+    xf::cv::xf_QuatizationDithering<XF_SRC_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC, XF_CV_DEPTH_GCM, XF_CV_DEPTH_QAD>(img_gcm, img_qad);
     obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
-    xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH, XF_CV_DEPTH_OUT>(img_clh, img_out, gamma_lut);
-    xf::cv::xfMat2Array<OUTPUT_PTR_WIDTH, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_out, pntr_out);
+    xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH, XF_CV_DEPTH_OUT>(img_clh, img_dst, gamma_lut);
+    xf::cv::xfMat2Array<OUTPUT_PTR_WIDTH, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_dst, pntr_out);
 }
 
 /*********************************************************************************
@@ -89,8 +89,8 @@ void ISPpipeline(ap_uint<INPUT_PTR_WIDTH>* pntr_in,
  * Return:
  * Description:
  **********************************************************************************/
-void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* img_inp,
-                       ap_uint<OUTPUT_PTR_WIDTH>* img_out,
+void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* in_pntr,
+                       ap_uint<OUTPUT_PTR_WIDTH>* out_pntr,
                        uint16_t width,
                        uint16_t height,
                        uint16_t lgain,
@@ -99,8 +99,8 @@ void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* img_inp,
                        uint16_t tilesX,
                        unsigned char gamma_lut[256]) {
 // clang-format off
-#pragma HLS INTERFACE m_axi     port=img_inp  offset=slave bundle=gmem1
-#pragma HLS INTERFACE m_axi     port=img_out  offset=slave bundle=gmem2
+#pragma HLS INTERFACE m_axi port=in_pntr  offset=slave bundle=gmem1
+#pragma HLS INTERFACE m_axi port=out_pntr offset=slave bundle=gmem2
 
 #pragma HLS INTERFACE s_axilite port=width      bundle=CTRL
 #pragma HLS INTERFACE s_axilite port=height     bundle=CTRL
@@ -116,13 +116,11 @@ void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* img_inp,
 
 // clang-format on
     if (!flag) {
-        ISPpipeline(s_axis_video, m_axis_video, height, width, lgain, gamma_lut, _lut1, _lut2, _clipCounter, clip,
-                    tilesX, tilesY);
+        ISPpipeline(in_pntr, out_pntr, height, width, lgain, gamma_lut, _lut1, _lut2, _clipCounter, clip, tilesX, tilesY);
         flag = 1;
 
     } else {
-        ISPpipeline(s_axis_video, m_axis_video, height, width, lgain, gamma_lut, _lut2, _lut1, _clipCounter, clip,
-                    tilesX, tilesY);
+        ISPpipeline(in_pntr, out_pntr, height, width, lgain, gamma_lut, _lut2, _lut1, _clipCounter, clip, tilesX, tilesY);
         flag = 0;
     }
 }

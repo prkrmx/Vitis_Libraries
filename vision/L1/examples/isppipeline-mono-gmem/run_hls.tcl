@@ -54,7 +54,7 @@ if {$VIVADO_SYN == 1} {
 }
 
 if {$VIVADO_IMPL == 1} {
-  export_design -flow impl -rtl verilog -format ip_catalog -output /home/max/Dropbox/projects/swir/hw.swir/hw.swir.ip_hls/isp_mono
+  export_design -flow impl -rtl verilog -format ip_catalog -output /home/max/Dropbox/projects/swir/hw.swir/hw.swir.ip_hls/isp_mono_gmem
 }
 
 exit

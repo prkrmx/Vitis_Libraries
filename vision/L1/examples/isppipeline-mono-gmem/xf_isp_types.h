@@ -82,8 +82,8 @@ typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
 // Prototype
 // --------------------------------------------------------------------
 // top level function for HW synthesis
-void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* img_inp,
-                       ap_uint<OUTPUT_PTR_WIDTH>* img_out,
+void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* in_pntr,
+                       ap_uint<OUTPUT_PTR_WIDTH>* out_pntr,
                        uint16_t width,
                        uint16_t height,
                        uint16_t lgain,

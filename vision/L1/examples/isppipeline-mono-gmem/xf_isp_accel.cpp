@@ -102,14 +102,14 @@ void ISPPipeline_accel(ap_uint<INPUT_PTR_WIDTH>* in_pntr,
 #pragma HLS INTERFACE m_axi port=in_pntr  offset=slave bundle=gmem1
 #pragma HLS INTERFACE m_axi port=out_pntr offset=slave bundle=gmem2
 
-#pragma HLS INTERFACE s_axilite port=width      bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=height     bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=lgain      bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=clip       bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=tilesY     bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=tilesX     bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=gamma_lut  bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=return     bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=width
+#pragma HLS INTERFACE s_axilite port=height
+#pragma HLS INTERFACE s_axilite port=lgain
+#pragma HLS INTERFACE s_axilite port=clip
+#pragma HLS INTERFACE s_axilite port=tilesY
+#pragma HLS INTERFACE s_axilite port=tilesX
+#pragma HLS INTERFACE s_axilite port=gamma_lut
+#pragma HLS INTERFACE s_axilite port=return
 
 #pragma HLS ARRAY_PARTITION variable=_lut1 dim=3 complete
 #pragma HLS ARRAY_PARTITION variable=_lut2 dim=3 complete

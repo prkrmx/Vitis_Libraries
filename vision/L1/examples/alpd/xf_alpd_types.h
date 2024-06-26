@@ -44,11 +44,7 @@
 #include "imgproc/xf_median_blur.hpp"
 #include "imgproc/xf_clahe.hpp"
 
-static constexpr int CLIPLIMIT = 32;
-static constexpr int TILES_Y_MIN = 2;
-static constexpr int TILES_X_MIN = 2;
-static constexpr int TILES_Y_MAX = 4;
-static constexpr int TILES_X_MAX = 4;
+
 
 // --------------------------------------------------------------------
 // Macros definitions
@@ -83,13 +79,10 @@ typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
 // --------------------------------------------------------------------
 // top level function for HW synthesis
 void ALPD_accel(InVideoStrm_t& s_axis_video,
-                       OutVideoStrm_t& m_axis_video,
-                       uint16_t width,
-                       uint16_t height,
-                       uint16_t lgain,
-                       uint16_t clip,
-                       uint16_t tilesY,
-                       uint16_t tilesX,
-                       unsigned char mode_reg,
-                       unsigned char gamma_lut[256]);
+                OutVideoStrm_t& m_axis_video,
+                uint16_t width,
+                uint16_t height,
+                uint8_t ctrl,
+                uint16_t threshold,
+                uint32_t alpd[256]);
 #endif //_XF_ALPD_TYPES_H_

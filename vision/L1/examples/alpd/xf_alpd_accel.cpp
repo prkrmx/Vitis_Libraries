@@ -14,25 +14,8 @@
  * limitations under the License.
  */
 
-#include "xf_isp_types.h"
+#include "xf_alpd_types.h"
 
-static bool flag = 0;
-
-// static uint32_t histogram0[1][256] = {0};
-// static uint32_t histogram1[1][256] = {0};
-
-#define CLAHE_T                                                                                           \
-    xf::cv::clahe::CLAHEImpl<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, CLIPLIMIT, TILES_Y_MAX, TILES_X_MAX, \
-                             XF_CV_DEPTH_QAD, XF_CV_DEPTH_CLH, TILES_Y_MIN, TILES_X_MIN>
-
-static constexpr int HIST_COUNTER_BITS = CLAHE_T::HIST_COUNTER_BITS;
-static constexpr int CLIP_COUNTER_BITS = CLAHE_T::CLIP_COUNTER_BITS;
-
-static ap_uint<HIST_COUNTER_BITS> _lut1[TILES_Y_MAX][TILES_X_MAX][(XF_NPIXPERCYCLE(XF_NPPC) << 1)]
-                                       [1 << XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC)];
-static ap_uint<HIST_COUNTER_BITS> _lut2[TILES_Y_MAX][TILES_X_MAX][(XF_NPIXPERCYCLE(XF_NPPC) << 1)]
-                                       [1 << XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC)];
-static ap_uint<CLIP_COUNTER_BITS> _clipCounter[TILES_Y_MAX][TILES_X_MAX];
 
 /************************************************************************************
  * Function:    AXIVideo2BayerMat
@@ -204,57 +187,29 @@ loop_row_mat2axi:
     return;
 }
 
-void ISPpipeline(InVideoStrm_t& s_axis_video,
-                 OutVideoStrm_t& m_axis_video,
-                 unsigned short height,
-                 unsigned short width,
-                 uint16_t lgain,
-                 unsigned char gamma_lut[256],
-                 ap_uint<HIST_COUNTER_BITS> _lutw[TILES_Y_MAX][TILES_X_MAX][(XF_NPIXPERCYCLE(XF_NPPC) << 1)]
-                                                 [1 << XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC)],
-                 ap_uint<HIST_COUNTER_BITS> _lutr[TILES_Y_MAX][TILES_X_MAX][(XF_NPIXPERCYCLE(XF_NPPC) << 1)]
-                                                 [1 << XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC)],
-                 ap_uint<CLIP_COUNTER_BITS> _clipCounter[TILES_Y_MAX][TILES_X_MAX],
-                 uint16_t clip,
-                 uint16_t tilesY,
-                 uint16_t tilesX,
-                 unsigned char mode_reg) {
+void ALPD(InVideoStrm_t& s_axis_video,
+            OutVideoStrm_t& m_axis_video,
+            unsigned short height,
+            unsigned short width,
+            unsigned char mode_reg,
+            unsigned short threshold,
+            unsigned int alpd[256]) {
     // clang-format off
 #pragma HLS INLINE OFF
 	// clang-format on
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP> img_inp(height, width);
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC> img_blc(height, width);
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF> img_mbf(height, width);
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GCM> img_gcm(height, width);
-    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_QAD> img_qad(height, width);
-    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH> img_clh(height, width);
-    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT> img_out(height, width);
+    xf::cv::Mat<XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT> img_out(height, width);
 
     // clang-format off
 #pragma HLS DATAFLOW
 	// clang-format on
 
-	CLAHE_T obj;
-	const int Q_VAL = 1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC));
-	float inputMax = (1 << (XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC))) - 1; // 65535.0f;
-	float mul_fact = (inputMax / (inputMax - BLACK_LEVEL));
 	ap_uint<8> mode = (ap_uint<8> ) mode_reg;
 	ap_uint<1> do_job = mode.range(0, 0); // Do JOB, otherwise pass to output
 
 	AXIVideo2BayerMat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(s_axis_video, img_inp);
 	if (do_job) {
-		xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP, XF_CV_DEPTH_BLC, 16, 15, 1>(
-			img_inp, img_blc, BLACK_LEVEL, mul_fact);
-		xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC, XF_CV_DEPTH_MBF>(
-			img_blc, img_mbf);
-		xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF, XF_CV_DEPTH_GCM>(
-			img_mbf, img_gcm, lgain);
-		xf::cv::xf_QuatizationDithering<XF_DST_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC, XF_CV_DEPTH_GCM, XF_CV_DEPTH_QAD>(
-			img_gcm, img_qad);
-		obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
-		xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH, XF_CV_DEPTH_OUT>(
-			img_clh, img_out, gamma_lut);
-		GrayMat2AXIvideo<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_out, m_axis_video);
+		// TODO: Do Job
     } else {
 		GrayMat2AXIvideo<XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_inp, m_axis_video);
 	}
@@ -267,51 +222,23 @@ void ISPpipeline(InVideoStrm_t& s_axis_video,
  * Description:
  **********************************************************************************/
 void ALPD_accel(InVideoStrm_t& s_axis_video,
-                       OutVideoStrm_t& m_axis_video,
-                       uint16_t width,
-                       uint16_t height,
-                       uint16_t lgain,
-                       uint16_t clip,
-                       uint16_t tilesY,
-                       uint16_t tilesX,
-                       unsigned char mode_reg,
-                       unsigned char gamma_lut[256]) {
-    // Create AXI Streaming Interfaces for the core
-    // clang-format off
+                OutVideoStrm_t& m_axis_video,
+                uint16_t width,
+                uint16_t height,
+                uint8_t ctrl,
+                uint16_t threshold,
+                uint32_t alpd[256]) {
+// clang-format off
 #pragma HLS INTERFACE axis port=&s_axis_video register
 #pragma HLS INTERFACE axis port=&m_axis_video register
 
-#pragma HLS INTERFACE s_axilite port=width      bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=height     bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=lgain      bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=clip       bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=tilesY     bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=tilesX     bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=mode_reg   bundle=CTRL
-#pragma HLS INTERFACE s_axilite port=gamma_lut  bundle=CTRL
-
-// #pragma HLS INTERFACE s_axilite port=lgain      bundle=CTRL offset=0x0020
-// #pragma HLS INTERFACE s_axilite port=clip       bundle=CTRL offset=0x0024
-// #pragma HLS INTERFACE s_axilite port=tilesY     bundle=CTRL offset=0x0028
-// #pragma HLS INTERFACE s_axilite port=tilesX     bundle=CTRL offset=0x002C
-// #pragma HLS INTERFACE s_axilite port=mode_reg   bundle=CTRL offset=0x0030
-// #pragma HLS INTERFACE s_axilite port=gamma_lut  bundle=CTRL offset=0x0100
-
-#pragma HLS INTERFACE s_axilite port=return bundle=CTRL
+#pragma HLS INTERFACE s_axilite port=width      
+#pragma HLS INTERFACE s_axilite port=height     
+#pragma HLS INTERFACE s_axilite port=ctrl       
+#pragma HLS INTERFACE s_axilite port=threshold  
+#pragma HLS INTERFACE s_axilite port=alpd       
+#pragma HLS INTERFACE s_axilite port=return     
 // clang-format on
-// clang-format off
-#pragma HLS ARRAY_PARTITION variable=_lut1 dim=3 complete
-#pragma HLS ARRAY_PARTITION variable=_lut2 dim=3 complete
 
-	// clang-format on
-    if (!flag) {
-        ISPpipeline(s_axis_video, m_axis_video, height, width, lgain, gamma_lut, _lut1, _lut2, _clipCounter, clip,
-                    tilesX, tilesY, mode_reg);
-        flag = 1;
-
-    } else {
-        ISPpipeline(s_axis_video, m_axis_video, height, width, lgain, gamma_lut, _lut2, _lut1, _clipCounter, clip,
-                    tilesX, tilesY, mode_reg);
-        flag = 0;
-    }
+    ALPD(s_axis_video, m_axis_video, height, width, ctrl, threshold, alpd);
 }

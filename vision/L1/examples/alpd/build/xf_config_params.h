@@ -16,8 +16,8 @@
 
 #define XF_NPPC XF_NPPC2 // XF_NPPC1 --1PIXEL , XF_NPPC2--2PIXEL ,XF_NPPC4--4 and XF_NPPC8--8PIXEL
 
-#define XF_WIDTH 1920  // MAX_COLS
-#define XF_HEIGHT 1080 // MAX_ROWS
+#define XF_WIDTH 1280  // MAX_COLS
+#define XF_HEIGHT 1024 // MAX_ROWS
 
 #define T_8U 0
 #define T_10U 0
@@ -28,19 +28,15 @@
 
 #if T_8U
 #define XF_SRC_T XF_8UC1
-#define XF_LTM_T XF_8UC1
 #define XF_DST_T XF_8UC1
 #elif T_16U
 #define XF_SRC_T XF_16UC1
-#define XF_LTM_T XF_8UC1
 #define XF_DST_T XF_16UC1
 #elif T_10U
 #define XF_SRC_T XF_10UC1
-#define XF_LTM_T XF_8UC1
 #define XF_DST_T XF_10UC1
 #elif T_12U
 #define XF_SRC_T XF_12UC1
-#define XF_LTM_T XF_8UC1
 #define XF_DST_T XF_12UC1
 #endif
 

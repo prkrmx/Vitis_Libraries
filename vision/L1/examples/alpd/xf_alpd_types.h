@@ -28,22 +28,7 @@
 #include "xf_config_params.h"
 
 // Requried Vision modules
-#include "imgproc/xf_bpc.hpp"
-#include "imgproc/xf_gaincontrol.hpp"
-#include "imgproc/xf_autowhitebalance.hpp"
-#include "imgproc/xf_demosaicing.hpp"
-#include "imgproc/xf_ltm.hpp"
-#include "imgproc/xf_quantizationdithering.hpp"
-#include "imgproc/xf_lensshadingcorrection.hpp"
-#include "imgproc/xf_colorcorrectionmatrix.hpp"
-#include "imgproc/xf_black_level.hpp"
-#include "imgproc/xf_aec.hpp"
 #include "imgproc/xf_cvt_color.hpp"
-#include "imgproc/xf_cvt_color_1.hpp"
-#include "imgproc/xf_gammacorrection.hpp"
-#include "imgproc/xf_median_blur.hpp"
-#include "imgproc/xf_clahe.hpp"
-
 
 
 // --------------------------------------------------------------------
@@ -80,9 +65,9 @@ typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
 // top level function for HW synthesis
 void ALPD_accel(InVideoStrm_t& s_axis_video,
                 OutVideoStrm_t& m_axis_video,
+                ap_uint<OUTPUT_PTR_WIDTH>* out_pntr,
                 uint16_t width,
                 uint16_t height,
-                uint8_t ctrl,
                 uint16_t threshold,
-                uint32_t alpd[256]);
+                uint8_t ctrl);
 #endif //_XF_ALPD_TYPES_H_

@@ -89,37 +89,6 @@ loop_row_axi2mat:
 
     return;
 }
-template <int SRC_T, int DST_T, int ROWS, int COLS, int NPC = 1, int XFCVDEPTH_IN, int XFCVDEPTH_OUT>
-void fifo_copy(xf::cv::Mat<SRC_T, ROWS, COLS, NPC, XFCVDEPTH_IN>& demosaic_out,
-               xf::cv::Mat<DST_T, ROWS, COLS, NPC, XFCVDEPTH_OUT>& ltm_in,
-               unsigned short height,
-               unsigned short width) {
-    // clang-format off
-#pragma HLS INLINE OFF
-    // clang-format on
-    ap_uint<13> row, col;
-    int readindex = 0, writeindex = 0;
-
-    ap_uint<13> img_width = width >> XF_BITSHIFT(NPC);
-
-Row_Loop:
-    for (row = 0; row < height; row++) {
-        // clang-format off
-#pragma HLS LOOP_TRIPCOUNT min=ROWS max=ROWS
-#pragma HLS LOOP_FLATTEN off
-    // clang-format on
-    Col_Loop:
-        for (col = 0; col < img_width; col++) {
-            // clang-format off
-#pragma HLS LOOP_TRIPCOUNT min=COLS/NPC max=COLS/NPC
-#pragma HLS pipeline
-            // clang-format on
-            XF_TNAME(SRC_T, NPC) tmp_src;
-            tmp_src = demosaic_out.read(readindex++);
-            ltm_in.write(writeindex++, tmp_src);
-        }
-    }
-}
 
 template <int TYPE, int ROWS, int COLS, int NPPC, int XFCVDEPTH_OUT>
 void GrayMat2AXIvideo(xf::cv::Mat<TYPE, ROWS, COLS, NPPC, XFCVDEPTH_OUT>& gray_mat, OutVideoStrm_t& gray_strm) {
@@ -187,32 +156,90 @@ loop_row_mat2axi:
     return;
 }
 
-void ALPD(InVideoStrm_t& s_axis_video,
-            OutVideoStrm_t& m_axis_video,
-            unsigned short height,
-            unsigned short width,
-            unsigned char mode_reg,
-            unsigned short threshold,
-            unsigned int alpd[256]) {
+template <int TYPE, int TYPE_M, int ROWS, int COLS, int NPPC, int XFCVDEPTH_BAYER>
+void ALPD_doJob(InVideoStrm_t& strm_in,
+                OutVideoStrm_t& strm_out,
+                xf::cv::Mat<TYPE_M, ROWS, COLS, NPPC, XFCVDEPTH_BAYER>& mat_dat,
+                ap_uint<1> do_job,
+                uint16_t threshold) {
     // clang-format off
 #pragma HLS INLINE OFF
-	// clang-format on
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP> img_inp(height, width);
-    xf::cv::Mat<XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT> img_out(height, width);
+    // clang-format on
+    InVideoStrmBus_t axi;
 
-    // clang-format off
-#pragma HLS DATAFLOW
-	// clang-format on
+    const int m_pix_width = XF_PIXELWIDTH(TYPE, NPPC) * XF_NPIXPERCYCLE(NPPC);
 
-	ap_uint<8> mode = (ap_uint<8> ) mode_reg;
-	ap_uint<1> do_job = mode.range(0, 0); // Do JOB, otherwise pass to output
+    int rows = mat_dat.rows;
+    int cols = mat_dat.cols >> XF_BITSHIFT(NPPC);
+    int idx = 0;
 
-	AXIVideo2BayerMat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(s_axis_video, img_inp);
-	if (do_job) {
-		// TODO: Do Job
-    } else {
-		GrayMat2AXIvideo<XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_inp, m_axis_video);
-	}
+    bool start = false;
+    bool last = false;
+
+loop_start_hunt:
+    while (!start) {
+        // clang-format off
+#pragma HLS pipeline II=1
+#pragma HLS loop_tripcount avg=0 max=0
+        // clang-format on
+
+        strm_in >> axi;
+        start = axi.user.to_bool();
+    }
+
+loop_row_axi2mat:
+    for (int i = 0; i < rows; i++) {
+        last = false;
+        // clang-format off
+#pragma HLS loop_tripcount avg=ROWS max=ROWS
+    // clang-format on
+    loop_col_zxi2mat:
+        for (int j = 0; j < cols; j++) {
+            // clang-format off
+#pragma HLS loop_flatten off
+#pragma HLS pipeline II=1
+#pragma HLS loop_tripcount avg=COLS/NPPC max=COLS/NPPC
+            // clang-format on
+
+            if (start || last) {
+                start = false;
+            } else {
+                strm_in >> axi;
+            }
+
+            last = axi.last.to_bool();
+
+            if (do_job) {
+                uint16_t ss = 0;
+                // if (axi.data(15, 0) > threshold) {
+                if (axi.data(14, 13)) {
+                    ss = 0xFF;
+                    axi.data(14, 13) = 0;
+                }
+                // if (axi.data(31, 16) > threshold) {
+                if (axi.data(30, 29)) {
+                    ss |= 0xFF00;
+                    axi.data(30, 29) = 0;
+                }
+                mat_dat.write(idx++, ss);
+            }
+            strm_out << axi;
+        }
+
+    loop_last_hunt:
+        while (!last) {
+            // clang-format off
+#pragma HLS pipeline II=1
+#pragma HLS loop_tripcount avg=0 max=0
+            // clang-format on
+
+            strm_in >> axi;
+            strm_out << axi;
+            last = axi.last.to_bool();
+        }
+    }
+
+    return;
 }
 
 /*********************************************************************************
@@ -223,22 +250,35 @@ void ALPD(InVideoStrm_t& s_axis_video,
  **********************************************************************************/
 void ALPD_accel(InVideoStrm_t& s_axis_video,
                 OutVideoStrm_t& m_axis_video,
+                ap_uint<OUTPUT_PTR_WIDTH>* out_pntr,
                 uint16_t width,
                 uint16_t height,
-                uint8_t ctrl,
                 uint16_t threshold,
-                uint32_t alpd[256]) {
-// clang-format off
+                uint8_t ctrl) {
+    // clang-format off
 #pragma HLS INTERFACE axis port=&s_axis_video register
 #pragma HLS INTERFACE axis port=&m_axis_video register
+#pragma HLS INTERFACE m_axi port=out_pntr offset=slave bundle=gmem
 
 #pragma HLS INTERFACE s_axilite port=width      
 #pragma HLS INTERFACE s_axilite port=height     
-#pragma HLS INTERFACE s_axilite port=ctrl       
 #pragma HLS INTERFACE s_axilite port=threshold  
-#pragma HLS INTERFACE s_axilite port=alpd       
-#pragma HLS INTERFACE s_axilite port=return     
-// clang-format on
+#pragma HLS INTERFACE s_axilite port=ctrl       
+#pragma HLS INTERFACE s_axilite port=return
+    // clang-format on
 
-    ALPD(s_axis_video, m_axis_video, height, width, ctrl, threshold, alpd);
+    // clang-format off
+#pragma HLS INLINE OFF
+    // clang-format on
+    xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_LTM> img_dat(height, width);
+    // clang-format off
+#pragma HLS DATAFLOW
+    // clang-format on
+
+    ap_uint<8> mode = (ap_uint<8>)ctrl;
+    ap_uint<1> do_job = mode.range(0, 0); // Do JOB, otherwise pass to output
+
+    ALPD_doJob<XF_SRC_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_LTM>(s_axis_video, m_axis_video, img_dat, do_job, threshold);
+    if (do_job)
+        xf::cv::xfMat2Array<OUTPUT_PTR_WIDTH, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_LTM>(img_dat, out_pntr);
 }

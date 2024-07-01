@@ -17,6 +17,8 @@
 #include "common/xf_headers.hpp"
 #include "xf_alpd_types.h"
 
+#define THRESHOLD 8192
+#define CTRL 0
 using namespace std;
 
 /*********************************************************************************
@@ -84,50 +86,86 @@ static void GrayAXIvideo2Mat(OutVideoStrm_t& AXI_video_strm, cv::Mat& img) {
     }
 }
 
+void ALPD_Detector(cv::Mat& img, cv::Mat& img_ret, unsigned short threshold) {
+    unsigned int MASK = 0x2000;
+    for (int row = 0; row < img.rows; row++) {
+        for (int col = 0; col < img.cols; col++) {
+            unsigned short value = img.at<unsigned short>(row, col);
+            // if (value >= threshold) {
+            if (value & MASK) {
+                img_ret.at<unsigned char>(row, col) = 255;
+                value &= ~MASK;
+                img.at<unsigned short>(row, col) = value;
+            } else
+                img_ret.at<unsigned char>(row, col) = 0;
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         fprintf(stderr, "Invalid Number of Arguments!\nUsage:\n");
         fprintf(stderr, "<Executable Name> <input image path> \n");
-        return -1;
+        return EXIT_FAILURE;
     }
 
-    cv::Mat img_in, img_out;
+    cv::Mat img_src, img_dst, img_dat, img_gld;
 
     InVideoStrm_t src_axi;
     OutVideoStrm_t dst_axi;
 
     // read input image
-    img_in = cv::imread(argv[1], -1);
+    img_src = cv::imread(argv[1], -1);
 
-    if (img_in.data == NULL) {
+    if (img_src.data == NULL) {
         fprintf(stderr, "Cannot open image at %s\n", argv[1]);
-        return 0;
+        return EXIT_FAILURE;
     }
 
-    std::cout << "Input image height : " << img_in.rows << std::endl;
-    std::cout << "Input image width  : " << img_in.cols << std::endl;
+    std::cout << "Input image height : " << img_src.rows << std::endl;
+    std::cout << "Input image width  : " << img_src.cols << std::endl;
     std::cout << "Input Image Bit Depth:" << XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC) << std::endl;
     std::cout << "Input Image Channels:" << XF_CHANNELS(XF_SRC_T, XF_NPPC) << std::endl;
     std::cout << "NPPC:" << XF_NPPC << std::endl;
-    std::cout << "IN DEPTH:" << img_in.depth() << std::endl;
+    std::cout << "IN DEPTH:" << img_src.depth() << std::endl;
 
-    img_out.create(img_in.rows, img_in.cols, CV_16UC1);
-    imwrite("input.png", img_in);
+    img_dst.create(img_src.rows, img_src.cols, CV_16UC1);
+    img_dat.create(img_src.rows, img_src.cols, CV_8UC1);
+    img_gld.create(img_src.rows, img_src.cols, CV_8UC1);
+    imwrite("input.png", img_src);
 
-    unsigned char ctrl = 0;
-    unsigned int gamma_lut[256];
-    unsigned short threshold = 8192;
+    unsigned char ctrl = CTRL;
+    unsigned short threshold = THRESHOLD;
 
-    GrayMat2AXIvideo(img_in, src_axi);
+    GrayMat2AXIvideo(img_src, src_axi);
 
     // Call IP Processing function
-    ALPD_accel(src_axi, dst_axi, img_in.cols, img_in.rows, ctrl, threshold, gamma_lut);
+    ALPD_accel(src_axi, dst_axi, (ap_uint<OUTPUT_PTR_WIDTH>*)img_dat.data, img_src.cols, img_src.rows, threshold, ctrl);
 
     // Convert processed image back to CV image, then to XVID image
-    GrayAXIvideo2Mat(dst_axi, img_out);
+    GrayAXIvideo2Mat(dst_axi, img_dst);
 
-    std::cout << "OUT DEPTH:" << img_out.depth() << std::endl;
-    imwrite("output.png", img_out);
+    std::cout << "OUT DEPTH:" << img_dst.depth() << std::endl;
+    std::cout << "DAT DEPTH:" << img_dat.depth() << std::endl;
+    imwrite("output.png", img_dst);
+    imwrite("img_dat.png", img_dat);
 
-    return 0;
+    if (ctrl) {
+        // ALPD Detector cpp for compare results
+        ALPD_Detector(img_src, img_gld, threshold);
+        std::cout << "GOLD DEPTH:" << img_gld.depth() << std::endl;
+        imwrite("gold.png", img_gld);
+    }
+
+    if (cv::sum(img_dst != img_src) != cv::Scalar(0, 0, 0, 0)) {
+        fprintf(stderr, "ERROR: Test Failed - Destination file not equal to source.\n ");
+        return EXIT_FAILURE;
+    }
+
+    if (cv::sum(img_dat != img_gld) != cv::Scalar(0, 0, 0, 0)) {
+        fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }

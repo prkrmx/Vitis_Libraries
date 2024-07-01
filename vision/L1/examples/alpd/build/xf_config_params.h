@@ -24,7 +24,9 @@
 #define T_12U 0
 #define T_16U 1
 
-#define WINDOW_SIZE 3
+#define OUTPUT_PTR_WIDTH 16
+#define XF_LTM_T XF_8UC1
+
 
 #if T_8U
 #define XF_SRC_T XF_8UC1
@@ -41,9 +43,5 @@
 #endif
 
 #define XF_CV_DEPTH_INP 2
-#define XF_CV_DEPTH_BLC 2
-#define XF_CV_DEPTH_MBF 2
-#define XF_CV_DEPTH_GCM 2
-#define XF_CV_DEPTH_QAD 2
-#define XF_CV_DEPTH_CLH 2
+#define XF_CV_DEPTH_LTM 0
 #define XF_CV_DEPTH_OUT 2

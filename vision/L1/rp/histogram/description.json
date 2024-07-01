@@ -1,5 +1,5 @@
 {
-    "name": "Xilinx Isppipeline-Mono Test", 
+    "name": "Histogram", 
     "description": "HLS case", 
     "flow": "hls", 
     "platform_allowlist": [
@@ -11,29 +11,29 @@
     "platform_blocklist": [], 
     "part_allowlist": [], 
     "part_blocklist": [], 
-    "project": "isppipeline", 
+    "project": "histogram", 
     "solution": "sol1", 
     "clock": "3.3", 
-    "topfunction": "ISPPipeline_accel", 
+    "topfunction": "Histogram_accel", 
     "top": {
         "source": [
-            "${XF_PROJ_ROOT}/L1/examples/isppipeline-mono/xf_isp_accel.cpp"
+            "${XF_PROJ_ROOT}/L1/rp/histogram/rp_histogram_accel.cpp"
         ], 
-        "cflags": " -I ${XF_PROJ_ROOT}/L1/examples/isppipeline-mono/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
-        "csimflags": " -I ${XF_PROJ_ROOT}/L1/examples/isppipeline-mono/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
+        "cflags": " -I ${XF_PROJ_ROOT}/L1/rp/histogram/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
+        "csimflags": " -I ${XF_PROJ_ROOT}/L1/rp/histogram/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
     }, 
     "testbench": {
         "source": [
-            "${XF_PROJ_ROOT}/L1/examples/isppipeline-mono/xf_isp_tb.cpp"
+            "${XF_PROJ_ROOT}/L1/rp/histogram/rp_histogram_tb.cpp"
         ], 
-        "cflags": " -I ${XF_PROJ_ROOT}/L1/examples/isppipeline-mono/build -I${OPENCV_INCLUDE} -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
+        "cflags": " -I ${XF_PROJ_ROOT}/L1/rp/histogram/build -I${OPENCV_INCLUDE} -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
         "ldflags": "-L ${OPENCV_LIB} -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -lopencv_highgui -lopencv_flann -lopencv_features2d", 
         "argv": {
-            "hls_csim": " ${XF_PROJ_ROOT}/data/16bit_lum.png ", 
-            "hls_cosim": " ${XF_PROJ_ROOT}/data/16bit_lum.png "
+            "hls_csim": " ${XF_PROJ_ROOT}/data/alpd_2.tiff ", 
+            "hls_cosim": " ${XF_PROJ_ROOT}/data/alpd_2.tiff "
         }, 
         "stdmath": false, 
-        "csimflags": " -I ${XF_PROJ_ROOT}/L1/examples/isppipeline-mono/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
+        "csimflags": " -I ${XF_PROJ_ROOT}/L1/rp/histogram/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
     }, 
     "testinfo": {
         "disable": false, 

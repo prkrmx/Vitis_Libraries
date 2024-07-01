@@ -21,7 +21,7 @@
 # make run CSIM=1 CSYNTH=1 COSIM=1 VIVADO_SYN=1 VIVADO_IMPL=1 XPART='xck26-sfvc784-2LVI-i'
 
 
-
+XPART	:='xck26-sfvc784-2LVI-i'
 MK_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CUR_DIR := $(patsubst %/,%,$(dir $(MK_PATH)))
 XF_PROJ_ROOT ?= $(shell bash -c 'export MK_PATH=$(MK_PATH); echo $${MK_PATH%/L1/*}')

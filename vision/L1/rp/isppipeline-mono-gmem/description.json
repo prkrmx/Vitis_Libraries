@@ -1,5 +1,5 @@
 {
-    "name": "ALPD Detector", 
+    "name": "Xilinx Isppipeline-Mono GMEM Test", 
     "description": "HLS case", 
     "flow": "hls", 
     "platform_allowlist": [
@@ -11,29 +11,29 @@
     "platform_blocklist": [], 
     "part_allowlist": [], 
     "part_blocklist": [], 
-    "project": "alpd", 
+    "project": "isppipeline", 
     "solution": "sol1", 
     "clock": "3.3", 
-    "topfunction": "ALPD_accel", 
+    "topfunction": "ISPPipeline_accel", 
     "top": {
         "source": [
-            "${XF_PROJ_ROOT}/L1/examples/alpd/xf_alpd_accel.cpp"
+            "${XF_PROJ_ROOT}/L1/rp/isppipeline-mono-gmem/xf_isp_accel.cpp"
         ], 
-        "cflags": " -I ${XF_PROJ_ROOT}/L1/examples/alpd/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
-        "csimflags": " -I ${XF_PROJ_ROOT}/L1/examples/alpd/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
+        "cflags": " -I ${XF_PROJ_ROOT}/L1/rp/isppipeline-mono-gmem/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
+        "csimflags": " -I ${XF_PROJ_ROOT}/L1/rp/isppipeline-mono-gmem/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
     }, 
     "testbench": {
         "source": [
-            "${XF_PROJ_ROOT}/L1/examples/alpd/xf_alpd_tb.cpp"
+            "${XF_PROJ_ROOT}/L1/rp/isppipeline-mono-gmem/xf_isp_tb.cpp"
         ], 
-        "cflags": " -I ${XF_PROJ_ROOT}/L1/examples/alpd/build -I${OPENCV_INCLUDE} -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
+        "cflags": " -I ${XF_PROJ_ROOT}/L1/rp/isppipeline-mono-gmem/build -I${OPENCV_INCLUDE} -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x", 
         "ldflags": "-L ${OPENCV_LIB} -lopencv_imgcodecs -lopencv_imgproc -lopencv_core -lopencv_highgui -lopencv_flann -lopencv_features2d", 
         "argv": {
-            "hls_csim": " ${XF_PROJ_ROOT}/data/alpd_2.tiff ", 
-            "hls_cosim": " ${XF_PROJ_ROOT}/data/alpd_2.tiff "
+            "hls_csim": " ${XF_PROJ_ROOT}/data/16bit_lum.png ", 
+            "hls_cosim": " ${XF_PROJ_ROOT}/data/16bit_lum.png "
         }, 
         "stdmath": false, 
-        "csimflags": " -I ${XF_PROJ_ROOT}/L1/examples/alpd/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
+        "csimflags": " -I ${XF_PROJ_ROOT}/L1/rp/isppipeline-mono-gmem/build -I${XF_PROJ_ROOT}/L1/include -I ./ -D__SDSVHLS__ -std=c++0x"
     }, 
     "testinfo": {
         "disable": false, 

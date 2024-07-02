@@ -17,8 +17,9 @@
 #include "common/xf_headers.hpp"
 #include "rp_histogram_types.h"
 
-#define THRESHOLD 8192
-#define CTRL 0
+
+#define SIZE 8192
+
 using namespace std;
 
 /*********************************************************************************
@@ -55,64 +56,21 @@ static void GrayMat2AXIvideo(cv::Mat& img, InVideoStrm_t& AXI_video_strm) {
     }
 }
 
-/*********************************************************************************
- * Function:    GrayAXIvideo2Mat
- * Description: Extract pixels from stream and write to open 16 bit gray CV Image
- **********************************************************************************/
-static void GrayAXIvideo2Mat(OutVideoStrm_t& AXI_video_strm, cv::Mat& img) {
-    int i, j, k, l;
-    ap_axiu<AXI_WIDTH_OUT, 1, 1, 1> axi;
-    unsigned short cv_pix;
-    int depth = XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC);
-    bool sof = 0;
-
-    for (i = 0; i < img.rows; i++) {
-        for (j = 0; j < img.cols / XF_NPPC; j++) { // 4 pixels read per iteration
-            AXI_video_strm >> axi;
-            if ((i == 0) && (j == 0)) {
-                if (axi.user.to_int() == 1) {
-                    sof = 1;
-                } else {
-                    j--;
-                }
-            }
-            if (sof) {
-                for (l = 0; l < XF_NPPC; l++) {
-                    cv_pix = axi.data(l * depth + depth - 1, l * depth);
-                    img.at<unsigned short>(i, (XF_NPPC * j + l)) = cv_pix;
-                }
-            } // if(sof)
-        }
-    }
-}
-
-void ALPD_Detector(cv::Mat& img, cv::Mat& img_ret, unsigned short threshold) {
-    unsigned int MASK = 0x2000;
-    for (int row = 0; row < img.rows; row++) {
-        for (int col = 0; col < img.cols; col++) {
-            unsigned short value = img.at<unsigned short>(row, col);
-            // if (value >= threshold) {
-            if (value & MASK) {
-                img_ret.at<unsigned char>(row, col) = 255;
-                value &= ~MASK;
-                img.at<unsigned short>(row, col) = value;
-            } else
-                img_ret.at<unsigned char>(row, col) = 0;
-        }
-    }
-}
-
 int main(int argc, char** argv) {
     if (argc != 2) {
         fprintf(stderr, "Invalid Number of Arguments!\nUsage:\n");
         fprintf(stderr, "<Executable Name> <input image path> \n");
         return EXIT_FAILURE;
     }
+    printf("-: Start C++ simulation\n");
 
-    cv::Mat img_src, img_dst, img_dat, img_gld;
-
+    cv::Mat img_src, hist_ocv;
     InVideoStrm_t src_axi;
-    OutVideoStrm_t dst_axi;
+    int histSize = SIZE;
+    float range[] = {0, SIZE};
+    const float* histRange = {range};
+    unsigned int* histogram = (unsigned int*)calloc(SIZE, sizeof(unsigned int));
+    // unsigned int* histogram = (unsigned int*)malloc(SIZE * sizeof(unsigned int));
 
     // read input image
     img_src = cv::imread(argv[1], -1);
@@ -122,50 +80,52 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    std::cout << "Input image height : " << img_src.rows << std::endl;
-    std::cout << "Input image width  : " << img_src.cols << std::endl;
-    std::cout << "Input Image Bit Depth:" << XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC) << std::endl;
-    std::cout << "Input Image Channels:" << XF_CHANNELS(XF_SRC_T, XF_NPPC) << std::endl;
-    std::cout << "NPPC:" << XF_NPPC << std::endl;
-    std::cout << "IN DEPTH:" << img_src.depth() << std::endl;
+    printf("-: Input image height: %d\n", img_src.rows);
+    printf("-: Input image width: %d\n", img_src.cols);
+    printf("-: Input image bit depth: %d\n", XF_DTPIXELDEPTH(XF_SRC_T, XF_NPPC));
+    printf("-: Input image channels: %d\n", XF_CHANNELS(XF_SRC_T, XF_NPPC));
+    printf("-: NPPC: %d\n", XF_NPPC);
+    printf("-: DEPTH: %d\n", img_src.depth());
 
-    img_dst.create(img_src.rows, img_src.cols, CV_16UC1);
-    img_dat.create(img_src.rows, img_src.cols, CV_8UC1);
-    img_gld.create(img_src.rows, img_src.cols, CV_8UC1);
     imwrite("input.png", img_src);
 
-    unsigned char ctrl = CTRL;
-    unsigned short threshold = THRESHOLD;
+    cv::calcHist(&img_src, 1, 0, cv::Mat(), hist_ocv, 1, &histSize, &histRange, 1, 0);
 
+    double min, max, mean;
+    cv::Scalar sclr = cv::mean(img_src);
+    cv::minMaxLoc(img_src, &min, &max);
+
+    printf("-: Input image min: %d, max: %d, mean %d\n", (uint32_t)min, (uint32_t)max, (uint32_t)sclr[0]);
+
+    // Mat to stream
     GrayMat2AXIvideo(img_src, src_axi);
 
     // Call IP Processing function
-    Histogram_accel(src_axi, dst_axi, (ap_uint<OUTPUT_PTR_WIDTH>*)img_dat.data, img_src.cols, img_src.rows, threshold, ctrl);
+    Histogram_accel(src_axi, histogram, img_src.cols, img_src.rows);
 
-    // Convert processed image back to CV image, then to XVID image
-    GrayAXIvideo2Mat(dst_axi, img_dst);
-
-    std::cout << "OUT DEPTH:" << img_dst.depth() << std::endl;
-    std::cout << "DAT DEPTH:" << img_dat.depth() << std::endl;
-    imwrite("output.png", img_dst);
-    imwrite("img_dat.png", img_dat);
-
-    if (ctrl) {
-        // ALPD Detector cpp for compare results
-        ALPD_Detector(img_src, img_gld, threshold);
-        std::cout << "GOLD DEPTH:" << img_gld.depth() << std::endl;
-        imwrite("gold.png", img_gld);
+    // Compare results
+    for (int cnt = 0; cnt < SIZE; cnt++) {
+        uint32_t val = (uint32_t)hist_ocv.at<float>(cnt);
+        if (val != histogram[cnt]) {
+            fprintf(stderr, "-: Failed.\n ");
+            return EXIT_FAILURE;
+        }
     }
 
-    if (cv::sum(img_dst != img_src) != cv::Scalar(0, 0, 0, 0)) {
-        fprintf(stderr, "ERROR: Test Failed - Destination file not equal to source.\n ");
-        return EXIT_FAILURE;
+    uint32_t hist_w = 8192, hist_h = 2000;
+    uint32_t bin_w = cvRound((double)hist_w / histSize);
+
+    cv::Mat histImage(hist_h, hist_w, CV_8UC1, cv::Scalar(0, 0, 0));
+
+    for (int i = 1; i < SIZE; i++) {
+        cv::line(histImage, 
+                 cv::Point(bin_w * (i), hist_h),
+                 cv::Point(bin_w * (i), hist_h - (uint32_t)hist_ocv.at<float>(i)), 
+                 cv::Scalar(80, 80, 80), 2, 8, 0);
     }
 
-    if (cv::sum(img_dat != img_gld) != cv::Scalar(0, 0, 0, 0)) {
-        fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
-        return EXIT_FAILURE;
-    }
+    imwrite("histogram.png", histImage);
 
+    printf("-: Simulation done!\n");
     return EXIT_SUCCESS;
 }

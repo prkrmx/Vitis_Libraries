@@ -23,6 +23,7 @@
 #include "hls_stream.h"
 #include "ap_int.h"
 #include "common/xf_common.hpp"
+#include "common/xf_utility.hpp"
 #include "ap_axi_sdata.h"
 #include "common/xf_axi_io.hpp"
 #include "rp_config_params.h"
@@ -64,10 +65,7 @@ typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
 // --------------------------------------------------------------------
 // top level function for HW synthesis
 void Histogram_accel(InVideoStrm_t& s_axis_video,
-                OutVideoStrm_t& m_axis_video,
-                ap_uint<OUTPUT_PTR_WIDTH>* out_pntr,
-                uint16_t width,
-                uint16_t height,
-                uint16_t threshold,
-                uint8_t ctrl);
+                     unsigned int* histogram,
+                     uint16_t width,
+                     uint16_t height);
 #endif //_RP_HISTOGRAM_TYPES_H_

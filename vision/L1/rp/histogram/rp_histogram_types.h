@@ -62,10 +62,14 @@ typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
 
 // --------------------------------------------------------------------
 // Prototype
+// Calculating histogram, min, max and sum of all pixels from the input stream 
 // --------------------------------------------------------------------
 // top level function for HW synthesis
 void Histogram_accel(InVideoStrm_t& s_axis_video,
                      unsigned int* histogram,
                      uint16_t width,
-                     uint16_t height);
+                     uint16_t height,
+                     uint16_t* min,
+                     uint16_t* max,
+                     uint64_t* sum) ;
 #endif //_RP_HISTOGRAM_TYPES_H_

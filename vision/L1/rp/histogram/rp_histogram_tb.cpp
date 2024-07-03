@@ -1,17 +1,5 @@
 /*
- * Copyright 2019 Xilinx, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Testbench
  */
 
 #include "common/xf_headers.hpp"
@@ -65,6 +53,8 @@ int main(int argc, char** argv) {
     printf("-: Start C++ simulation\n");
 
     cv::Mat img_src, hist_ocv;
+    uint16_t mmin = 0, mmax = 0;
+    uint64_t sum = 0;
     InVideoStrm_t src_axi;
     int histSize = SIZE;
     float range[] = {0, SIZE};
@@ -91,40 +81,47 @@ int main(int argc, char** argv) {
 
     cv::calcHist(&img_src, 1, 0, cv::Mat(), hist_ocv, 1, &histSize, &histRange, 1, 0);
 
-    double min, max, mean;
+    double min = 0, max = 0;
     cv::Scalar sclr = cv::mean(img_src);
     cv::minMaxLoc(img_src, &min, &max);
-
-    printf("-: Input image min: %d, max: %d, mean %d\n", (uint32_t)min, (uint32_t)max, (uint32_t)sclr[0]);
+    uint32_t mean = (uint32_t)sclr[0];
+    printf("-: Input image min: %d, max: %d, mean %d\n", (uint32_t)min, (uint32_t)max, mean);
 
     // Mat to stream
     GrayMat2AXIvideo(img_src, src_axi);
 
     // Call IP Processing function
-    Histogram_accel(src_axi, histogram, img_src.cols, img_src.rows);
+    Histogram_accel(src_axi, histogram, img_src.cols, img_src.rows, &mmin, &mmax, &sum);
+    printf("-: Accel image min: %d, max: %d, mean %d\n", mmin, mmax, sum / (img_src.cols * img_src.rows));
 
-    // Compare results
+    // Compare histogram results
     for (int cnt = 0; cnt < SIZE; cnt++) {
         uint32_t val = (uint32_t)hist_ocv.at<float>(cnt);
         if (val != histogram[cnt]) {
-            fprintf(stderr, "-: Failed.\n ");
+            fprintf(stderr, "-: Failed histogram test.\n ");
             return EXIT_FAILURE;
         }
     }
 
-    uint32_t hist_w = 8192, hist_h = 2000;
-    uint32_t bin_w = cvRound((double)hist_w / histSize);
-
-    cv::Mat histImage(hist_h, hist_w, CV_8UC1, cv::Scalar(0, 0, 0));
-
-    for (int i = 1; i < SIZE; i++) {
-        cv::line(histImage, 
-                 cv::Point(bin_w * (i), hist_h),
-                 cv::Point(bin_w * (i), hist_h - (uint32_t)hist_ocv.at<float>(i)), 
-                 cv::Scalar(80, 80, 80), 2, 8, 0);
+    // Compare min, max, mean results
+    if (min != mmin || max != mmax || mean != (sum / (img_src.cols * img_src.rows))) {
+        fprintf(stderr, "-: Failed min, max, mean test.\n ");
+        return EXIT_FAILURE;
     }
 
-    imwrite("histogram.png", histImage);
+    uint32_t hist_w = SIZE, hist_h = 2000;
+    uint32_t bin_w = cvRound((double)hist_w / histSize);
+
+    cv::Mat hist_mat(hist_h, hist_w, CV_8UC1, cv::Scalar(0, 0, 0));
+
+    for (int i = 1; i < SIZE; i++) {
+        cv::line(hist_mat, 
+                 cv::Point(bin_w * (i), hist_h),
+                 cv::Point(bin_w * (i), hist_h - (uint32_t)hist_ocv.at<float>(i)), 
+                 cv::Scalar(120, 120, 120), 2, 8, 0);
+    }
+
+    imwrite("histogram.png", hist_mat);
 
     printf("-: Simulation done!\n");
     return EXIT_SUCCESS;

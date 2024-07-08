@@ -3,11 +3,11 @@
 
 #include "rp_nuc_types.h"
 
-template <int TYPE, int TYPE_I, int ROWS, int COLS, int NPPC, int NPPC_I, int XFCVDEPTH_BAYER>
+template <int TYPE, int TYPE_T, int ROWS, int COLS, int NPPC, int NPPC_T, int XFCVDEPTH_BAYER>
 void nuc_apply(VideoStrm_t& strm_in,
                VideoStrm_t& strm_out,
-               xf::cv::Mat<TYPE_I, ROWS, COLS, NPPC_I, XFCVDEPTH_BAYER>& mat_gain,
-               xf::cv::Mat<TYPE_I, ROWS, COLS, NPPC_I, XFCVDEPTH_BAYER>& mat_offset,
+               xf::cv::Mat<TYPE_T, ROWS, COLS, NPPC_T, XFCVDEPTH_BAYER>& mat_gain,
+               xf::cv::Mat<TYPE_T, ROWS, COLS, NPPC_T, XFCVDEPTH_BAYER>& mat_offset,
                ap_uint<1> do_job) {
     // clang-format off
 #pragma HLS INLINE OFF
@@ -19,8 +19,8 @@ void nuc_apply(VideoStrm_t& strm_in,
     int idx = 0;
     int depth = XF_DTPIXELDEPTH(TYPE, NPPC);
 
-    XF_TNAME(TYPE_I, NPPC_I) gain;
-    XF_TNAME(TYPE_I, NPPC_I) offset;
+    XF_TNAME(TYPE_T, NPPC_T) gain;
+    XF_TNAME(TYPE_T, NPPC_T) offset;
 
     bool start = false;
     bool last = false;
@@ -62,13 +62,8 @@ loop_row_axi2mat:
                     gain = mat_gain.read(idx + npc);
                     offset = mat_offset.read(idx + npc);
                     int _start = npc * depth;
-                    int _stop = _start + (depth - 1);
-                    int _gain = gain.range(31, 0);
-                    int _offset = offset.range(31, 0);
-                    uint16_t val = axi.data(_stop, _start);
-                    uint16_t dd = (val * _gain) >> 10;
-                    uint16_t dds = dd + _offset;
-                    axi.data(_stop, _start) = dds;
+                    uint16_t val = axi.data(_start + (depth - 1), _start);
+                    axi.data(_start + (depth - 1), _start) = (uint16_t)(((val * gain) >> 10) + offset);
                 }
 
                 // uint16_t _gain = gain.range(15,0);
@@ -83,7 +78,7 @@ loop_row_axi2mat:
                 // val = ((val * _gain) >> 10)  + _offset;
                 // axi.data(31, 16) = val;
             }
-            idx+=2;
+            idx += 2;
             strm_out << axi;
         }
 
@@ -129,19 +124,21 @@ void NUC_accel(VideoStrm_t& s_axis_video,
     // clang-format off
 #pragma HLS INLINE OFF
     // clang-format on
-    xf::cv::Mat<XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC1, XF_CV_DEPTH_INP> img_gain(height, width);
-    xf::cv::Mat<XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC1, XF_CV_DEPTH_INP> img_offset(height, width);
+    xf::cv::Mat<XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC_T, XF_CV_DEPTH_TAB> img_gain(height, width);
+    xf::cv::Mat<XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC_T, XF_CV_DEPTH_TAB> img_offset(height, width);
 
     // clang-format off
 #pragma HLS DATAFLOW
     // clang-format on
 
-    xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC1, XF_CV_DEPTH_INP>(offset_pntr,
-                                                                                                  img_offset);
-    xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC1, XF_CV_DEPTH_INP>(gain_pntr, img_gain);
+    xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC_T, XF_CV_DEPTH_TAB>(offset_pntr,
+                                                                                                    img_offset);
+    xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC_T, XF_CV_DEPTH_TAB>(gain_pntr,
+                                                                                                    img_gain);
 
     ap_uint<8> mode = (ap_uint<8>)ctrl;
     ap_uint<1> do_job = mode.range(0, 0); // Do JOB, otherwise pass to output
 
-    nuc_apply<XF_SRC_T, XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_NPPC1, XF_CV_DEPTH_INP>(s_axis_video, m_axis_video, img_gain, img_offset, do_job);
+    nuc_apply<XF_SRC_T, XF_TAB_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_NPPC_T, XF_CV_DEPTH_TAB>(
+        s_axis_video, m_axis_video, img_gain, img_offset, do_job);
 }

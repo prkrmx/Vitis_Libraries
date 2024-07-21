@@ -6,7 +6,7 @@
 #include "rp_nuc_types.h"
 
 
-#define CTRL 1
+#define CTRL 0
 
 using namespace std;
 
@@ -14,7 +14,7 @@ using namespace std;
  * Function:    GrayMat2AXIvideo
  * Description: 16 bit Mat to stream
  **********************************************************************************/
-static void GrayMat2AXIvideo(cv::Mat& img, VideoStrm_t& AXI_video_strm) {
+static void GrayMat2AXIvideo(cv::Mat& img, InVideoStrm_t& AXI_video_strm) {
     int i, j, k, l;
 
     unsigned short cv_pix;
@@ -48,7 +48,7 @@ static void GrayMat2AXIvideo(cv::Mat& img, VideoStrm_t& AXI_video_strm) {
  * Function:    GrayAXIvideo2Mat
  * Description: Extract pixels from stream and write to open 16 bit gray CV Image
  **********************************************************************************/
-static void GrayAXIvideo2Mat(VideoStrm_t& AXI_video_strm, cv::Mat& img) {
+static void GrayAXIvideo2Mat(OutVideoStrm_t& AXI_video_strm, cv::Mat& img) {
     int i, j, k, l;
     ap_axiu<AXI_WIDTH_OUT, 1, 1, 1> axi;
     unsigned short cv_pix;
@@ -115,8 +115,9 @@ int main(int argc, char** argv) {
     }
     printf("-: Start C++ simulation\n");
 
-    VideoStrm_t src_axi;
-    VideoStrm_t dst_axi;
+    InVideoStrm_t src_axi;
+    OutVideoStrm_t dst_axi;
+
     cv::Mat img_src, img_dst, gain, offset, img_gld;
     img_src = cv::imread(argv[1], -1);
 
@@ -152,10 +153,18 @@ int main(int argc, char** argv) {
     // Convert processed image back to CV image
     GrayAXIvideo2Mat(dst_axi, img_dst);
 
-
-    if (cv::sum(img_dst != img_gld) != cv::Scalar(0, 0, 0, 0)) {
-        fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
-        return EXIT_FAILURE;
+    if (CTRL) {
+        printf("-: Compare Gold image with accel output\n");
+        if (cv::sum(img_dst != img_gld) != cv::Scalar(0, 0, 0, 0)) {
+            fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
+            return EXIT_FAILURE;
+        }
+    } else {
+        printf("-: Compare Source image with accel output\n");
+        if (cv::sum(img_dst != img_src) != cv::Scalar(0, 0, 0, 0)) {
+            fprintf(stderr, "ERROR: Test Failed - Source image not equal to accel.\n ");
+            return EXIT_FAILURE;
+        }
     }
 
     printf("-: Simulation done!\n");

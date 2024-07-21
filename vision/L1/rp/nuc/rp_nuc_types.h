@@ -52,18 +52,20 @@
 // Internal types
 // --------------------------------------------------------------------
 // Input/Output AXI video buses
-typedef ap_axiu<AXI_WIDTH_IN, 1, 1, 1> VideoStrmBus_t;
+typedef ap_axiu<AXI_WIDTH_IN, 1, 1, 1> InVideoStrmBus_t;
+typedef ap_axiu<AXI_WIDTH_OUT, 1, 1, 1> OutVideoStrmBus_t;
 
 // Input/Output AXI video stream
-typedef hls::stream<VideoStrmBus_t> VideoStrm_t;
+typedef hls::stream<InVideoStrmBus_t> InVideoStrm_t;
+typedef hls::stream<OutVideoStrmBus_t> OutVideoStrm_t;
 
 // --------------------------------------------------------------------
 // Prototype
 // Applying NUC data to input stream pixels 
 // --------------------------------------------------------------------
 // top level function for HW synthesis
-void NUC_accel(VideoStrm_t& s_axis_video,
-               VideoStrm_t& m_axis_video,
+void NUC_accel(InVideoStrm_t& s_axis_video,
+               OutVideoStrm_t& m_axis_video,
                ap_uint<INPUT_PTR_WIDTH>* gain_pntr,
                ap_uint<INPUT_PTR_WIDTH>* offset_pntr,
                uint16_t width,

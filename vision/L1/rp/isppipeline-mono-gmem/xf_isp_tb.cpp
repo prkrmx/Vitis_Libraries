@@ -65,13 +65,13 @@ void compute_gamma_lum(float l_g, uchar gamma_lut[256]) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
+    if (argc != 3) {
         fprintf(stderr, "Invalid Number of Arguments!\nUsage:\n");
         fprintf(stderr, "<Executable Name> <input image path> \n");
         return -1;
     }
 
-    cv::Mat raw_src, raw_dst;
+    cv::Mat raw_src, raw_dst, raw_gold;
     int clip = 3;
     int tilesY = TILES_Y_MAX;
     int tilesX = TILES_X_MAX;
@@ -88,6 +88,13 @@ int main(int argc, char** argv) {
         return 0;
     }
     imwrite("input.png", raw_src);
+    
+    raw_gold= cv::imread(argv[2], -1);
+    if (raw_gold.data == NULL) {
+        fprintf(stderr, "Cannot open gold source at %s\n", argv[2]);
+        return 0;
+    }
+
     raw_dst.create(raw_src.rows, raw_src.cols, CV_8UC1);
 
     std::cout << "Input image height: " << raw_src.rows << std::endl;
@@ -102,9 +109,25 @@ int main(int argc, char** argv) {
 
     for (int i = 0; i < 2; i++) {
         // Call IP Processing function
-        ISPPipeline_accel((ap_uint<INPUT_PTR_WIDTH>*)raw_src.data, (ap_uint<INPUT_PTR_WIDTH>*)raw_dst.data, raw_src.cols, raw_src.rows, gain_lum, clip, tilesY, tilesX, gamma_lut);
+        ISPPipeline_accel((ap_uint<INPUT_PTR_WIDTH>*)raw_src.data, (ap_uint<OUTPUT_PTR_WIDTH>*)raw_dst.data, raw_src.cols, raw_src.rows, gain_lum, clip, tilesY, tilesX, gamma_lut);
     }
     imwrite("output.png", raw_dst);
 
-    return 0;
+    printf("-: DO JOB: Compare Gold image with accel output\n");
+    // if (cv::sum(raw_dst != raw_gold) != cv::Scalar(0, 0, 0, 0)) {
+    //     printf("ERROR: Test Failed - Gold image not equal to accel.\n ");
+    //     return EXIT_FAILURE;
+    // }
+
+    // for (int row = 0; row < raw_dst.rows; row++) {
+    //     for (int col = 0; col < raw_dst.cols; col++) {
+    //         uint8_t _dst = raw_dst.at<uint8_t>(row, col);
+    //         uint8_t _gld = raw_gold.at<uint8_t>(row, col);
+    //         if (_gld != _dst) {
+    //             printf("ERROR: [%d, %d]Gold %d Dst %d\n", row, col, _gld, _dst);
+    //         }
+    //     }
+    // }
+
+    return EXIT_SUCCESS;
 }

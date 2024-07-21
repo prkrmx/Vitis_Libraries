@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#define XF_NPPC XF_NPPC1 // XF_NPPC1 --1PIXEL , XF_NPPC2--2PIXEL ,XF_NPPC4--4 and XF_NPPC8--8PIXEL
+// #define XF_NPPC XF_NPPC1 // XF_NPPC1 --1PIXEL , XF_NPPC2--2PIXEL ,XF_NPPC4--4 and XF_NPPC8--8PIXEL
 
-#define XF_WIDTH 1920  // MAX_COLS
-#define XF_HEIGHT 1080 // MAX_ROWS
+#define XF_WIDTH 1280  // MAX_COLS
+#define XF_HEIGHT 1024 // MAX_ROWS
 
 #define T_8U 0
 #define T_10U 0
@@ -44,13 +44,32 @@
 #define XF_DST_T XF_12UC1
 #endif
 
-#define INPUT_PTR_WIDTH 32
-#define OUTPUT_PTR_WIDTH 32
+// #define INPUT_PTR_WIDTH 32
+// #define OUTPUT_PTR_WIDTH 32
 
-#define XF_CV_DEPTH_INP 3
-#define XF_CV_DEPTH_BLC 3
-#define XF_CV_DEPTH_MBF 3
-#define XF_CV_DEPTH_GCM 3
-#define XF_CV_DEPTH_QAD 3
-#define XF_CV_DEPTH_CLH 3
-#define XF_CV_DEPTH_OUT 3
+#define XF_CV_DEPTH_INP 2
+#define XF_CV_DEPTH_BLC 2
+#define XF_CV_DEPTH_MBF 2
+#define XF_CV_DEPTH_GCM 2
+#define XF_CV_DEPTH_QAD 0
+#define XF_CV_DEPTH_CLH 0
+#define XF_CV_DEPTH_OUT 0
+
+
+
+#define NO 0 // Normal Operation
+#define RO 0 // Resource Optimized
+
+#if NO 
+// Normal Operation
+#define XF_NPPC XF_NPPC1
+#define INPUT_PTR_WIDTH 16
+#define OUTPUT_PTR_WIDTH 8
+#else
+// #endif
+// #if RO 
+// Resource Optimized
+#define XF_NPPC XF_NPPC2
+#define INPUT_PTR_WIDTH 32
+#define OUTPUT_PTR_WIDTH 16
+#endif

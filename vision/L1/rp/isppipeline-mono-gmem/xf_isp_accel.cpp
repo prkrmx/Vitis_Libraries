@@ -31,7 +31,75 @@ static ap_uint<HIST_COUNTER_BITS> _lut2[TILES_Y_MAX][TILES_X_MAX][(XF_NPIXPERCYC
                                        [1 << XF_DTPIXELDEPTH(XF_LTM_T, XF_NPPC)];
 static ap_uint<CLIP_COUNTER_BITS> _clipCounter[TILES_Y_MAX][TILES_X_MAX];
 
+/*********************************************************************************
+ * Function:    Copy
+ * Parameters:  
+ * Return:
+ * Description: Copy source image to destination
+ **********************************************************************************/
+template <int SRC_T, int DST_T, int ROWS, int COLS, int NPPC, int XFCVDEPTH_SRC, int XFCVDEPTH_DST>
+void copy(xf::cv::Mat<SRC_T, ROWS, COLS, NPPC, XFCVDEPTH_SRC>& mat_src,
+          xf::cv::Mat<DST_T, ROWS, COLS, NPPC, XFCVDEPTH_DST>& mat_dst) {
+    // clang-format off
+#pragma HLS INLINE OFF
+    // clang-format on
 
+    int rows = mat_src.rows;
+    int cols = mat_src.cols >> XF_BITSHIFT(NPPC);
+
+    int i_src = 0, i_dst = 0;
+
+fifo_loop_row:
+    for (int row = 0; row < rows; row++) {
+        // clang-format off
+#pragma HLS LOOP_TRIPCOUNT min=ROWS max=ROWS
+#pragma HLS LOOP_FLATTEN off
+    // clang-format on
+    fifo_loop_col:
+        for (int col = 0; col < cols; col++) {
+            // clang-format off
+#pragma HLS LOOP_TRIPCOUNT min=COLS/NPPC max=COLS/NPPC
+#pragma HLS pipeline
+            // clang-format on
+            XF_TNAME(SRC_T, NPPC) tmp_src;
+            tmp_src = mat_src.read(i_src++);
+            mat_dst.write(i_dst++, tmp_src);
+        }
+    }
+    return;
+}
+
+template <int SRC_T, int DST_T, int ROWS, int COLS, int NPC = 1, int XFCVDEPTH_IN, int XFCVDEPTH_OUT>
+void fifo_copy(xf::cv::Mat<SRC_T, ROWS, COLS, NPC, XFCVDEPTH_IN>& demosaic_out,
+               xf::cv::Mat<DST_T, ROWS, COLS, NPC, XFCVDEPTH_OUT>& ltm_in,
+               unsigned short height,
+               unsigned short width) {
+// clang-format off
+#pragma HLS INLINE OFF
+    // clang-format on
+    ap_uint<13> row, col;
+    int readindex = 0, writeindex = 0;
+
+    ap_uint<13> img_width = width >> XF_BITSHIFT(NPC);
+
+Row_Loop:
+    for (row = 0; row < height; row++) {
+// clang-format off
+#pragma HLS LOOP_TRIPCOUNT min=ROWS max=ROWS
+#pragma HLS LOOP_FLATTEN off
+    // clang-format on
+    Col_Loop:
+        for (col = 0; col < img_width; col++) {
+// clang-format off
+#pragma HLS LOOP_TRIPCOUNT min=COLS/NPC max=COLS/NPC
+#pragma HLS pipeline
+            // clang-format on
+            XF_TNAME(SRC_T, NPC) tmp_src;
+            tmp_src = demosaic_out.read(readindex++);
+            ltm_in.write(writeindex++, tmp_src);
+        }
+    }
+}
 
 /************************************************************************************
  * Function:    ISPpipeline
@@ -58,7 +126,7 @@ void ISPpipeline(ap_uint<INPUT_PTR_WIDTH>* pntr_in,
 // clang-format on
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP> img_src(height, width);
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC> img_blc(height, width);
-    xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF> img_mbf(height, width);
+    // xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF> img_mbf(height, width);
     xf::cv::Mat<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_GCM> img_gcm(height, width);
     xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_QAD> img_qad(height, width);
     xf::cv::Mat<XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH> img_clh(height, width);
@@ -75,8 +143,8 @@ void ISPpipeline(ap_uint<INPUT_PTR_WIDTH>* pntr_in,
 
     xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(pntr_in, img_src);
     xf::cv::blackLevelCorrection<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP, XF_CV_DEPTH_BLC, 16, 15, 1>(img_src, img_blc, BLACK_LEVEL, mul_fact);
-    xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC, XF_CV_DEPTH_MBF>(img_blc, img_mbf);
-    xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF, XF_CV_DEPTH_GCM>(img_mbf, img_gcm, lgain);
+    // xf::cv::medianBlur<WINDOW_SIZE, XF_BORDER_REPLICATE, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_BLC, XF_CV_DEPTH_MBF>(img_blc, img_mbf);
+    xf::cv::gaincontrol_mono<XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_MBF, XF_CV_DEPTH_GCM>(img_blc, img_gcm, lgain);
     xf::cv::xf_QuatizationDithering<XF_SRC_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, 256, Q_VAL, XF_NPPC, XF_CV_DEPTH_GCM, XF_CV_DEPTH_QAD>(img_gcm, img_qad);
     obj.process(img_clh, img_qad, _lutw, _lutr, _clipCounter, height, width, clip, tilesY, tilesX);
     xf::cv::gammacorrection<XF_LTM_T, XF_LTM_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_CLH, XF_CV_DEPTH_OUT>(img_clh, img_dst, gamma_lut);

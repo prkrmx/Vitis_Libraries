@@ -102,6 +102,16 @@ void ALPD_Detector(cv::Mat& img, cv::Mat& img_ret, unsigned short threshold) {
     }
 }
 
+void Check(cv::Mat& img_1, cv::Mat& img_2) {
+    for (int row = 0; row < img_1.rows; row++) {
+        for (int col = 0; col < img_1.cols; col++) {
+            unsigned short v1 = img_1.at<unsigned short>(row, col);
+            unsigned short v2 = img_2.at<unsigned short>(row, col);
+            if (v1 != v2) printf("row %d col %d nok %d != %d\n", row, col, v1, v2);
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         fprintf(stderr, "Invalid Number of Arguments!\nUsage:\n");
@@ -140,7 +150,7 @@ int main(int argc, char** argv) {
     GrayMat2AXIvideo(img_src, src_axi);
 
     // Call IP Processing function
-    ALPD_accel(src_axi, dst_axi, (ap_uint<OUTPUT_PTR_WIDTH>*)img_dat.data, img_src.cols, img_src.rows, threshold, ctrl);
+    ALPD_accel(src_axi, dst_axi, (ap_uint<OUTPUT_PTR_WIDTH>*)img_dat.data, img_src.cols, img_src.rows, ctrl);
 
     // Convert processed image back to CV image, then to XVID image
     GrayAXIvideo2Mat(dst_axi, img_dst);
@@ -157,15 +167,19 @@ int main(int argc, char** argv) {
         imwrite("gold.png", img_gld);
     }
 
+    if (cv::sum(img_dat != img_gld) != cv::Scalar(0, 0, 0, 0)) {
+        fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
+        return EXIT_FAILURE;
+    }
+    printf("Gold image equal to accel!\n");
+
+    // Check(img_src, img_dst);
     if (cv::sum(img_dst != img_src) != cv::Scalar(0, 0, 0, 0)) {
         fprintf(stderr, "ERROR: Test Failed - Destination file not equal to source.\n ");
         return EXIT_FAILURE;
     }
 
-    if (cv::sum(img_dat != img_gld) != cv::Scalar(0, 0, 0, 0)) {
-        fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
-        return EXIT_FAILURE;
-    }
-
+    printf("Destination file equal to source.!\n");
+    printf("Simulation done!\n");
     return EXIT_SUCCESS;
 }

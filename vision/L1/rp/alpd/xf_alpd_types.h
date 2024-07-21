@@ -68,6 +68,5 @@ void ALPD_accel(InVideoStrm_t& s_axis_video,
                 ap_uint<OUTPUT_PTR_WIDTH>* out_pntr,
                 uint16_t width,
                 uint16_t height,
-                uint16_t threshold,
                 uint8_t ctrl);
 #endif //_XF_ALPD_TYPES_H_

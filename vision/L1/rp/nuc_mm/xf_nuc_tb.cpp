@@ -14,7 +14,7 @@
 
 
 using namespace std;
-
+#define CTRL 0
 
 void SetTables(cv::Mat& mat_gain, cv::Mat& mat_offset) {
     for (int i = 0; i < mat_gain.rows; i++) {
@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
     printf("-: Start C++ simulation\n");
 
     cv::Mat img_src, img_dst, gain, offset, img_gld;
+    uint8_t ctrl = CTRL;
     img_src = cv::imread(argv[1], -1);
 
     if (img_src.data == NULL) {
@@ -75,12 +76,20 @@ int main(int argc, char** argv) {
     // Call IP Processing function
     NUC2P_Accel((ap_uint<INPUT_PTR_WIDTH>*)img_src.data, (ap_uint<IN_TBG_PTR_WIDTH>*)gain.data,
                 (ap_uint<IN_TBO_PTR_WIDTH>*)offset.data, (ap_uint<OUTPUT_PTR_WIDTH>*)img_dst.data, img_src.cols,
-                img_src.rows);
+                img_src.rows, ctrl);
 
-    printf("-: Compare Gold image with accel output\n");
-    if (cv::sum(img_dst != img_gld) != cv::Scalar(0, 0, 0, 0)) {
-        fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
-        return EXIT_FAILURE;
+    if (ctrl) {
+        printf("-: DO JOB: Compare Gold image with accel output\n");
+        if (cv::sum(img_dst != img_gld) != cv::Scalar(0, 0, 0, 0)) {
+            fprintf(stderr, "ERROR: Test Failed - Gold image not equal to accel.\n ");
+            return EXIT_FAILURE;
+        }
+    } else {
+        printf("-: COPY: Compare Source image with accel output\n");
+        if (cv::sum(img_dst != img_src) != cv::Scalar(0, 0, 0, 0)) {
+            fprintf(stderr, "ERROR: Test Failed - Source image not equal to accel.\n ");
+            return EXIT_FAILURE;
+        }
     }
 
     printf("-: Simulation done!\n");

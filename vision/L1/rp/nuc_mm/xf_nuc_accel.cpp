@@ -1,6 +1,6 @@
 /*
  * File:     xf_nuc_accel.cpp
- * Notes:    
+ * Notes:
  *
  * Author:   Engr. Max Parker
  * Created:  Thu Jul 11 2024
@@ -8,9 +8,14 @@
  * Copyright (C) 2024 RP Optical Lab
  */
 
-
 #include "xf_nuc_types.h"
 
+/*********************************************************************************
+ * Function:    NUC2P
+ * Parameters:
+ * Return:
+ * Description:
+ **********************************************************************************/
 template <int TYPE_SR,
           int TYPE_TG,
           int TYPE_TO,
@@ -25,7 +30,8 @@ template <int TYPE_SR,
 void nuc(xf::cv::Mat<TYPE_SR, ROWS, COLS, NPPC, XFCVDEPTH_SR>& mat_src,
          xf::cv::Mat<TYPE_TG, ROWS, COLS, NPPC, XFCVDEPTH_TG>& mat_gain,
          xf::cv::Mat<TYPE_TO, ROWS, COLS, NPPC, XFCVDEPTH_TO>& mat_offst,
-         xf::cv::Mat<TYPE_DS, ROWS, COLS, NPPC, XFCVDEPTH_DS>& mat_dst) {
+         xf::cv::Mat<TYPE_DS, ROWS, COLS, NPPC, XFCVDEPTH_DS>& mat_dst,
+         ap_uint<1> do_job) {
     // clang-format off
 #pragma HLS INLINE OFF
     // clang-format on
@@ -37,8 +43,8 @@ void nuc(xf::cv::Mat<TYPE_SR, ROWS, COLS, NPPC, XFCVDEPTH_SR>& mat_src,
     int depth_mn = XF_DTPIXELDEPTH(TYPE_SR, NPPC);
     int depth_tg = XF_DTPIXELDEPTH(TYPE_TG, NPPC);
     int depth_to = XF_DTPIXELDEPTH(TYPE_TO, NPPC);
-    
-    // Chunks of data  
+
+    // Chunks of data
     XF_TNAME(TYPE_SR, NPPC) ch_src;
     XF_TNAME(TYPE_TG, NPPC) ch_gain;
     XF_TNAME(TYPE_TO, NPPC) ch_offst;
@@ -46,32 +52,74 @@ void nuc(xf::cv::Mat<TYPE_SR, ROWS, COLS, NPPC, XFCVDEPTH_SR>& mat_src,
 
 nuc_loop_row:
     for (int row = 0; row < rows; row++) {
-// clang-format off
+        // clang-format off
 #pragma HLS loop_tripcount avg=ROWS max=ROWS
-// clang-format on
+        // clang-format on
     nuc_loop_col:
         for (int col = 0; col < cols; col++) {
-// clang-format off
+            // clang-format off
 #pragma HLS loop_flatten off
 #pragma HLS pipeline II=1
 #pragma HLS loop_tripcount avg=COLS/NPPC max=COLS/NPPC
-// clang-format on
+            // clang-format on
 
             ch_src = mat_src.read(i_src++);
             ch_gain = mat_gain.read(i_gain++);
             ch_offst = mat_offst.read(i_offst++);
-            for (int npc = 0; npc < NPPC; npc++) {
-                for (int rs = 0; rs < 1; rs++) {
-                    int strt_mn = (rs + npc) * depth_mn;
-                    int strt_tg = (rs + npc) * depth_tg;
-                    uint16_t px_src = ch_src.range(strt_mn + (depth_mn - 1), strt_mn);
-                    uint16_t px_gain = ch_gain.range(strt_tg + (depth_tg - 1), strt_tg);
-                    int16_t px_offst = ch_offst.range(strt_tg + (depth_to - 1), strt_tg);
-                    uint16_t px_dst = (uint16_t)(((px_src * px_gain) >> 10) + px_offst);
-                    ch_dst.range(strt_mn + (depth_mn - 1), strt_mn) = px_dst;
+            if (do_job) {
+                for (int npc = 0; npc < NPPC; npc++) {
+                    for (int rs = 0; rs < 1; rs++) {
+                        int strt_mn = (rs + npc) * depth_mn;
+                        int strt_tg = (rs + npc) * depth_tg;
+                        uint16_t px_src = ch_src.range(strt_mn + (depth_mn - 1), strt_mn);
+                        uint16_t px_gain = ch_gain.range(strt_tg + (depth_tg - 1), strt_tg);
+                        int16_t px_offst = ch_offst.range(strt_tg + (depth_to - 1), strt_tg);
+                        uint16_t px_dst = (uint16_t)(((px_src * px_gain) >> 10) + px_offst);
+                        ch_dst.range(strt_mn + (depth_mn - 1), strt_mn) = px_dst;
+                    }
                 }
-            }
+            } else
+                ch_dst = ch_src;
+
             mat_dst.write(i_dst++, ch_dst);
+        }
+    }
+    return;
+}
+
+/*********************************************************************************
+ * Function:    Copy
+ * Parameters:  
+ * Return:
+ * Description: Copy source image to destination
+ **********************************************************************************/
+template <int SRC_T, int DST_T, int ROWS, int COLS, int NPPC, int XFCVDEPTH_SRC, int XFCVDEPTH_DST>
+void copy(xf::cv::Mat<SRC_T, ROWS, COLS, NPPC, XFCVDEPTH_SRC>& mat_src,
+          xf::cv::Mat<DST_T, ROWS, COLS, NPPC, XFCVDEPTH_DST>& mat_dst) {
+    // clang-format off
+#pragma HLS INLINE OFF
+    // clang-format on
+
+    int rows = mat_src.rows;
+    int cols = mat_src.cols >> XF_BITSHIFT(NPPC);
+
+    int i_src = 0, i_dst = 0;
+
+fifo_loop_row:
+    for (int row = 0; row < rows; row++) {
+        // clang-format off
+#pragma HLS LOOP_TRIPCOUNT min=ROWS max=ROWS
+#pragma HLS LOOP_FLATTEN off
+    // clang-format on
+    fifo_loop_col:
+        for (int col = 0; col < cols; col++) {
+            // clang-format off
+#pragma HLS LOOP_TRIPCOUNT min=COLS/NPPC max=COLS/NPPC
+#pragma HLS pipeline
+            // clang-format on
+            XF_TNAME(SRC_T, NPPC) tmp_src;
+            tmp_src = mat_src.read(i_src++);
+            mat_dst.write(i_dst++, tmp_src);
         }
     }
     return;
@@ -83,12 +131,13 @@ nuc_loop_row:
  * Return:
  * Description:
  **********************************************************************************/
-void NUC2P_Accel(ap_uint<INPUT_PTR_WIDTH>* src_pntr,
+void NUC2P_Accel(ap_uint<INPUT_PTR_WIDTH>*  src_pntr,
                  ap_uint<IN_TBG_PTR_WIDTH>* gain_pntr,
                  ap_uint<IN_TBO_PTR_WIDTH>* offset_pntr,
                  ap_uint<OUTPUT_PTR_WIDTH>* dst_pntr,
                  uint16_t width,
-                 uint16_t height) {
+                 uint16_t height,
+                 uint8_t  ctrl) {
     // clang-format off
 #pragma HLS INTERFACE m_axi port=src_pntr  offset=slave bundle=gmem_in
 #pragma HLS INTERFACE m_axi port=gain_pntr offset=slave bundle=gmem_gain
@@ -97,6 +146,7 @@ void NUC2P_Accel(ap_uint<INPUT_PTR_WIDTH>* src_pntr,
 
 #pragma HLS INTERFACE s_axilite port=width
 #pragma HLS INTERFACE s_axilite port=height
+#pragma HLS INTERFACE s_axilite port=ctrl
 #pragma HLS INTERFACE s_axilite port=return
     // clang-format on
 
@@ -112,12 +162,16 @@ void NUC2P_Accel(ap_uint<INPUT_PTR_WIDTH>* src_pntr,
 #pragma HLS DATAFLOW
     // clang-format on
 
+
+    ap_uint<8> mode = (ap_uint<8>)ctrl;
+    ap_uint<1> do_job = mode.range(0, 0); // Do JOB, otherwise pass to output
+
     xf::cv::Array2xfMat<INPUT_PTR_WIDTH, XF_SRC_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP>(src_pntr, img_src);
     xf::cv::Array2xfMat<IN_TBG_PTR_WIDTH, XF_TBG_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_TBG>(gain_pntr, img_gain);
     xf::cv::Array2xfMat<IN_TBO_PTR_WIDTH, XF_TBO_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_TBO>(offset_pntr, img_offset);
 
     nuc<XF_SRC_T, XF_TBG_T, XF_TBO_T, XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_INP, XF_CV_DEPTH_TBG,
-        XF_CV_DEPTH_TBO, XF_CV_DEPTH_OUT>(img_src, img_gain, img_offset, img_dst);
+        XF_CV_DEPTH_TBO, XF_CV_DEPTH_OUT>(img_src, img_gain, img_offset, img_dst, do_job);
 
     xf::cv::xfMat2Array<OUTPUT_PTR_WIDTH, XF_DST_T, XF_HEIGHT, XF_WIDTH, XF_NPPC, XF_CV_DEPTH_OUT>(img_dst, dst_pntr);
 }
